@@ -1,26 +1,17 @@
-use std::fmt;
+use crate::protocol;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    RangeError,
-    Io(std::io::Error),
-}
-
-impl std::error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            // Both underlying errors already impl `Display`, so we defer to
-            // their implementations.
-            Error::Io(ref err) => write!(f, "IO error: {}", err),
-            Error::RangeError => write!(f, "Value out of range"),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
-    }
+    #[error(
+        "The port number {0} is outside the permissible range of {} to {}",
+        protocol::PORT_NUMBER_MIN,
+        protocol::PORT_NUMBER_MAX
+    )]
+    PortOutOfRange(u8),
+    #[error(
+        "The address value {0} is outside the permissible range of {} to {}",
+        protocol::ADDRESS_MIN,
+        protocol::ADDRESS_MAX
+    )]
+    AddressOutOfRange(u8),
 }

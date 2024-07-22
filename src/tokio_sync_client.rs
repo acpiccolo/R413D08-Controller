@@ -1,8 +1,8 @@
-use crate::{protocol as proto, Error};
+use crate::protocol as proto;
 use std::time::Duration;
 use tokio_modbus::prelude::{SyncReader, SyncWriter};
 
-type Result<T> = std::result::Result<T, Error>;
+type Result<T> = std::result::Result<T, crate::tokio_error::Error>;
 
 pub struct R413D08 {
     ctx: tokio_modbus::client::sync::Context,
@@ -27,7 +27,7 @@ impl R413D08 {
     pub fn read_ports(&mut self) -> Result<Vec<super::State>> {
         let rsp = self
             .ctx
-            .read_holding_registers(proto::READ_PORTS_REG_ADDR, proto::READ_PORTS_REG_QUAN)?;
+            .read_holding_registers(proto::READ_PORTS_REG_ADDR, proto::READ_PORTS_REG_QUAN)??;
         Ok(rsp
             .iter()
             .map(|relay| {
@@ -47,7 +47,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_OPEN_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set all ports to open.
@@ -55,7 +55,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::SET_ALL_PORTS_OPEN_REG_ADDR,
             proto::SET_ALL_PORTS_OPEN_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set port to close.
@@ -65,7 +65,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_CLOSE_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set all ports to close.
@@ -73,7 +73,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::SET_ALL_PORTS_CLOSE_REG_ADDR,
             proto::SET_ALL_PORTS_CLOSE_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Toggle port status.
@@ -83,7 +83,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_TOGGLE_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set port to low an all others to high.
@@ -93,7 +93,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_LATCH_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set port to low for 1 second.
@@ -103,7 +103,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_MOMENTARY_REG_DATA,
-        )?)
+        )??)
     }
 
     /// Set port to low for delay seconds.
@@ -114,7 +114,7 @@ impl R413D08 {
         Ok(self.ctx.write_single_register(
             proto::encode_port_number(port)?,
             proto::SET_PORT_DELAY_REG_DATA + delay as u16,
-        )?)
+        )??)
     }
 
     /// Reads the current Modbus address
@@ -125,7 +125,7 @@ impl R413D08 {
     pub fn read_address(&mut self) -> Result<u8> {
         let rsp = self
             .ctx
-            .read_holding_registers(proto::READ_ADDRESS_REG_ADDR, proto::READ_ADDRESS_REG_QUAN)?;
+            .read_holding_registers(proto::READ_ADDRESS_REG_ADDR, proto::READ_ADDRESS_REG_QUAN)??;
         Ok(*rsp.first().expect("Result on success expected") as u8)
     }
 
@@ -136,7 +136,7 @@ impl R413D08 {
         self.ctx.write_single_register(
             proto::WRITE_ADDRESS_REG_ADDR,
             proto::write_address_encode_address(address)?,
-        )?;
+        )??;
         Ok(())
     }
 }
