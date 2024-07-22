@@ -24,19 +24,23 @@ pub const READ_ADDRESS_REG_ADDR: u16 = 0x00FF;
 pub const READ_ADDRESS_REG_QUAN: u16 = 0x001;
 pub const WRITE_ADDRESS_REG_ADDR: u16 = 0x00FF;
 
+pub const PORT_NUMBER_MIN: u8 = 0;
+pub const PORT_NUMBER_MAX: u8 = NUMBER_OF_PORTS - 1;
 pub fn encode_port_number(port: u8) -> std::result::Result<u16, Error> {
-    if (0..=NUMBER_OF_PORTS - 1).contains(&port) {
+    if (PORT_NUMBER_MIN..=PORT_NUMBER_MAX).contains(&port) {
         Ok((port as u16) + 1)
     } else {
-        Err(Error::RangeError)
+        Err(Error::PortOutOfRange(port))
     }
 }
 
+pub const ADDRESS_MIN: u8 = 1;
+pub const ADDRESS_MAX: u8 = 247;
 pub fn write_address_encode_address(address: u8) -> std::result::Result<u16, Error> {
-    if (1..=247).contains(&address) {
+    if (ADDRESS_MIN..=ADDRESS_MAX).contains(&address) {
         Ok(address as u16)
     } else {
-        Err(Error::RangeError)
+        Err(Error::AddressOutOfRange(address))
     }
 }
 
@@ -48,13 +52,13 @@ mod tests {
     fn write_address_encode_address_test() {
         assert!(matches!(
             write_address_encode_address(0),
-            Err(Error::RangeError)
+            Err(Error::AddressOutOfRange(0))
         ));
         assert!(matches!(write_address_encode_address(1), Ok(1)));
         assert!(matches!(write_address_encode_address(247), Ok(247)));
         assert!(matches!(
             write_address_encode_address(248),
-            Err(Error::RangeError)
+            Err(Error::AddressOutOfRange(248))
         ));
     }
 }
