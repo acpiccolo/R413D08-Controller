@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use clap_num::maybe_hex;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use dialoguer::Confirm;
 use flexi_logger::{Logger, LoggerHandle};
@@ -14,6 +13,14 @@ fn default_device_name() -> String {
     } else {
         String::from("/dev/ttyUSB0")
     }
+}
+
+fn parse_relay(s: &str) -> Result<u8, String> {
+    clap_num::number_range(s, proto::PORT_NUMBER_MIN, proto::PORT_NUMBER_MAX)
+}
+
+fn parse_address(s: &str) -> Result<u8, String> {
+    clap_num::maybe_hex_range(s, proto::ADDRESS_MIN, proto::ADDRESS_MAX)
 }
 
 #[derive(Subcommand, Debug, Clone, PartialEq)]
@@ -33,7 +40,7 @@ enum CliConnection {
         device: String,
 
         /// RS485 address from 1 to 247
-        #[arg(short, long, default_value_t = proto::FACTORY_DEFAULT_ADDRESS, value_parser=maybe_hex::<u8>)]
+        #[arg(short, long, default_value_t = proto::FACTORY_DEFAULT_ADDRESS, value_parser = parse_address)]
         address: u8,
 
         #[command(subcommand)]
@@ -49,18 +56,21 @@ pub enum CliCommands {
     /// Set a relay to on
     On {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
     },
 
     /// Set a relay to off
     Off {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
     },
 
     /// Toggle a relay
     Toggle {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
     },
 
@@ -73,18 +83,21 @@ pub enum CliCommands {
     /// Turn relay to on an all others to off
     Latch {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
     },
 
     /// Turn relay on for 1 second
     Momentary {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
     },
 
     /// Turn relay on for delay seconds
     Delay {
         /// Relay number 0 to 7
+        #[arg(value_parser = parse_relay)]
         relay: u8,
         /// Delay in seconds from 0 to 255
         delay: u8,
@@ -97,7 +110,7 @@ pub enum CliCommands {
     /// Set the RS485 address
     SetAddress {
         /// The RS485 address can be from 1 to 247
-        #[arg(value_parser=maybe_hex::<u8>)]
+        #[arg(value_parser = parse_address)]
         address: u8,
     },
 }
