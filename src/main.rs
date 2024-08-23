@@ -129,9 +129,9 @@ struct CliArgs {
     #[command(subcommand)]
     pub connection: CliConnection,
 
-    /// Modbus timeout in milliseconds
-    #[arg(long, default_value_t = 200)]
-    timeout: u16,
+    /// Modbus Input/Output operations timeout
+    #[arg(value_parser = humantime::parse_duration, long, default_value = "200ms")]
+    timeout: Duration,
 }
 
 fn logging_init(loglevel: LevelFilter) -> LoggerHandle {
@@ -227,7 +227,7 @@ fn main() -> Result<()> {
             )
         }
     };
-    d.set_timeout(Duration::from_millis(args.timeout as u64));
+    d.set_timeout(args.timeout);
 
     match command {
         CliCommands::Status => {
