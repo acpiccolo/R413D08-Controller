@@ -1,3 +1,11 @@
+//! A command-line interface (CLI) application for controlling an R413D08
+//! 8-channel relay module via Modbus RTU (Serial) or Modbus TCP.
+//!
+//! This tool allows reading relay statuses, controlling individual or all relays
+//! using various modes (On, Off, Toggle, Latch, Momentary, Delay), and managing
+//! the device's Modbus address. It uses the `r413d08_lib` crate which provides
+//! the necessary protocol definitions and a synchronous Modbus client.
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::{InfoLevel, Verbosity};
@@ -15,33 +23,34 @@ fn default_device_name() -> String {
     }
 }
 
-fn parse_relay(s: &str) -> Result<u8, String> {
-    clap_num::number_range(s, proto::PORT_NUMBER_MIN, proto::PORT_NUMBER_MAX)
+fn parse_relay(s: &str) -> Result<proto::Port, String> {
+    proto::Port::try_from(clap_num::maybe_hex::<u8>(s)?).map_err(|e| format!("{e}"))
 }
 
-fn parse_address(s: &str) -> Result<u8, String> {
-    clap_num::maybe_hex_range(s, proto::ADDRESS_MIN, proto::ADDRESS_MAX)
+fn parse_address(s: &str) -> Result<proto::Address, String> {
+    proto::Address::try_from(clap_num::maybe_hex::<u8>(s)?).map_err(|e| format!("{e}"))
 }
 
+/// Defines the connection type and parameters (Modbus TCP or RTU).
 #[derive(Subcommand, Debug, Clone, PartialEq)]
 enum CliConnection {
-    /// Use Modbus/TCP connection
+    /// Connect via Modbus/TCP.
     Tcp {
-        // TCP address (e.g. 192.168.0.222:502)
+        /// TCP address (e.g. 192.168.0.222:502)
         address: String,
 
         #[command(subcommand)]
         command: CliCommands,
     },
-    /// Use Modbus/RTU connection
+    /// Connect via Modbus/RTU (Serial).
     Rtu {
-        /// Device
+        /// The serial device path (e.g., "/dev/ttyUSB0", "COM3").
         #[arg(short, long, default_value_t = default_device_name())]
         device: String,
 
         /// RS485 address from 1 to 247
-        #[arg(short, long, default_value_t = proto::FACTORY_DEFAULT_ADDRESS, value_parser = parse_address)]
-        address: u8,
+        #[arg(short, long, default_value_t = proto::Address::default(), value_parser = parse_address)]
+        address: proto::Address,
 
         #[command(subcommand)]
         command: CliCommands,
@@ -50,93 +59,95 @@ enum CliConnection {
 
 #[derive(Subcommand, Debug, Clone, PartialEq)]
 pub enum CliCommands {
-    /// Read the current state of all relays
+    /// Read and display the current state (ON/OFF) of all 8 relays.
     Status,
 
-    /// Set a relay to on
+    /// Turn a specific relay ON (Close circuit).
     On {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
+        relay: proto::Port,
     },
 
-    /// Set a relay to off
+    /// Turn a specific relay OFF (Open circuit).
     Off {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
+        relay: proto::Port,
     },
 
-    /// Toggle a relay
+    /// Toggle the state of a specific relay (ON->OFF, OFF->ON).
     Toggle {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
+        relay: proto::Port,
     },
 
-    /// Set all relays to on
+    /// Turn all 8 relays ON simultaneously.
     AllOn,
 
-    /// Set all relays to off
+    /// Turn all 8 relays OFF simultaneously.
     AllOff,
 
-    /// Turn relay to on an all others to off
+    /// Latch a relay ON and turn all other relays OFF (Inter-locking).
     Latch {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
+        relay: proto::Port,
     },
 
-    /// Turn relay on for 1 second
+    /// Turn a relay ON momentarily (~1 second), then automatically OFF (Non-locking).
     Momentary {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
+        relay: proto::Port,
     },
 
-    /// Turn relay on for delay seconds
+    /// Turn a relay ON, then automatically OFF after a specified delay.
     Delay {
         /// Relay number 0 to 7
         #[arg(value_parser = parse_relay)]
-        relay: u8,
-        /// Delay in seconds from 0 to 255
+        relay: proto::Port,
+        /// Delay duration in seconds (0-255).
         delay: u8,
     },
 
-    /// Queries the current RS485 address, this message is broadcasted.
-    /// Only one module can be connected to the RS485 bus, more than one will be wrong!
+    /// Query the device's current Modbus address.
+    /// IMPORTANT: Ensure only ONE device is connected to the bus!
     QueryAddress,
 
-    /// Set the RS485 address
+    /// Set a new Modbus address for the device.
+    /// The new address must be unique on the bus. Requires addressing the device with its CURRENT address.
     SetAddress {
-        /// The RS485 address can be from 1 to 247
+        /// The new Modbus address (1-247) or hex (0x01-0xF7).
         #[arg(value_parser = parse_address)]
-        address: u8,
+        address: proto::Address,
     },
 }
 
 const fn about_text() -> &'static str {
-    "8 channel relay controller for the command line"
+    "A command-line tool to control R413D08 8-channel relay modules via Modbus TCP or RTU."
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about=about_text(), long_about = None)]
 struct CliArgs {
+    /// Verbosity level (-v, -vv, -vvv).
     #[command(flatten)]
     verbose: Verbosity<InfoLevel>,
 
-    // Connection type
+    /// Connection type (TCP or RTU) and associated command.
     #[command(subcommand)]
     pub connection: CliConnection,
 
-    /// Modbus Input/Output operations timeout
+    /// Modbus I/O timeout duration (e.g., "200ms", "1s").
     #[arg(value_parser = humantime::parse_duration, long, default_value = "200ms")]
     timeout: Duration,
 }
 
 fn logging_init(loglevel: LevelFilter) -> LoggerHandle {
     let log_handle = Logger::try_with_env_or_str(loglevel.as_str())
-        .expect("Cannot init logging")
+        .expect("Cannot initialize logging")
         .start()
         .expect("Cannot start logging");
 
@@ -148,14 +159,9 @@ fn logging_init(loglevel: LevelFilter) -> LoggerHandle {
         let cause = panic_info
             .payload()
             .downcast_ref::<String>()
-            .map(String::deref);
-        let cause = cause.unwrap_or_else(|| {
-            panic_info
-                .payload()
-                .downcast_ref::<&str>()
-                .copied()
-                .unwrap_or("<cause unknown>")
-        });
+            .map(String::deref)
+            .or_else(|| panic_info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or("<cause unknown>");
 
         error!(
             "Thread '{}' panicked at {}:{}:{}: {}",
@@ -174,12 +180,12 @@ fn main() -> Result<()> {
 
     let _log_handle = logging_init(args.verbose.log_level_filter());
 
-    let (mut d, command) = match &args.connection {
+    let (mut client, command) = match &args.connection {
         CliConnection::Tcp { address, command } => {
             let socket_addr = address
                 .parse()
-                .with_context(|| format!("Cannot parse address {}", address))?;
-            trace!("Open TCP address {}", socket_addr);
+                .with_context(|| format!("Cannot parse TCP address '{}'", address))?;
+            trace!("Connecting via TCP to {}...", socket_addr);
             (
                 R413D08::new(
                     tokio_modbus::client::sync::tcp::connect(socket_addr)
@@ -194,50 +200,53 @@ fn main() -> Result<()> {
             command,
         } => {
             let address = if command == &CliCommands::QueryAddress {
-                println!("Use this command only if ONLY ONE module is connected to the RS485 bus!");
+                println!("Ensure ONLY ONE device is connected to the RS485 bus.");
                 let confirmation = Confirm::new()
                     .with_prompt("Do you want to continue?")
                     .default(false)
                     .show_default(true)
-                    .interact()?;
+                    .interact()
+                    .context("Failed to get user confirmation")?;
                 if !confirmation {
                     return Ok(());
                 }
-                if *address != proto::READ_ADDRESS_BROADCAST_ADDRESS {
+                let broadcast_address = proto::Address::BROADCAST;
+                if address != &broadcast_address {
                     info!(
-                        "Ignore address {:#04x} use broadcast address {:#04x}",
-                        address,
-                        proto::READ_ADDRESS_BROADCAST_ADDRESS
+                        "Ignore address {} use broadcast address {}",
+                        address, broadcast_address
                     );
                 }
-                proto::READ_ADDRESS_BROADCAST_ADDRESS
+                broadcast_address
             } else {
                 *address
             };
-            trace!("Open RTU {} address {:#04x}", device, address);
+            trace!("Connecting via RTU to {} address {}", device, address);
             (
                 R413D08::new(
                     tokio_modbus::client::sync::rtu::connect_slave(
                         &r413d08_lib::tokio_serial::serial_port_builder(device),
-                        tokio_modbus::Slave(address),
+                        tokio_modbus::Slave(*address),
                     )
-                    .with_context(|| format!("Cannot open device {}", device))?,
+                    .with_context(|| format!("Cannot open RTU device {}", device))?,
                 ),
                 command,
             )
         }
     };
-    d.set_timeout(args.timeout);
+    client.set_timeout(Some(args.timeout));
 
     match command {
         CliCommands::Status => {
-            let rsp = d.read_ports().with_context(|| "Cannot read status")?;
-            println!("Status:");
-            for (idx, relay) in rsp.iter().enumerate() {
+            let rsp = client
+                .read_ports()
+                .context("Failed to read port status")??;
+            println!("Relay Status:");
+            for (idx, state) in rsp.iter().enumerate() {
                 println!(
                     "  Relay {}: {}",
                     idx,
-                    if *relay == r413d08_lib::State::Close {
+                    if state == &proto::PortState::Close {
                         "OFF"
                     } else {
                         "ON"
@@ -246,28 +255,72 @@ fn main() -> Result<()> {
             }
         }
         CliCommands::On { relay } => {
-            d.set_port_open(*relay)?;
+            client
+                .set_port_open(*relay)
+                .with_context(|| format!("Failed to turn ON relay {}", **relay))??;
+            println!("Relay {} turned ON", **relay);
         }
-        CliCommands::AllOn => d.set_all_open()?,
+        CliCommands::AllOn => {
+            client
+                .set_all_open()
+                .context("Failed to turn ALL relays ON")??;
+            println!("All relays turned ON");
+        }
         CliCommands::Off { relay } => {
-            d.set_port_close(*relay)?;
+            client
+                .set_port_close(*relay)
+                .with_context(|| format!("Failed to turn OFF relay {}", **relay))??;
+            println!("Relay {} turned OFF", **relay);
         }
-        CliCommands::AllOff => d.set_all_close()?,
+        CliCommands::AllOff => {
+            client
+                .set_all_close()
+                .context("Failed to turn ALL relays OFF")??;
+            println!("All relays turned OFF");
+        }
         CliCommands::Toggle { relay } => {
-            d.set_port_toggle(*relay)?;
+            client
+                .set_port_toggle(*relay)
+                .with_context(|| format!("Failed to toggle relay {}", **relay))??;
+            println!("Relay {} toggled", **relay);
         }
-        CliCommands::Latch { relay } => d.set_port_latch(*relay)?,
-        CliCommands::Momentary { relay } => d.set_port_momentary(*relay)?,
-        CliCommands::Delay { relay, delay } => d.set_port_delay(*relay, *delay)?,
+        CliCommands::Latch { relay } => {
+            client
+                .set_port_latch(*relay)
+                .with_context(|| format!("Failed to latch relay {}", **relay))??;
+            println!("Relay {} latched ON (others OFF)", **relay);
+        }
+        CliCommands::Momentary { relay } => {
+            client
+                .set_port_momentary(*relay)
+                .with_context(|| format!("Failed to activate momentary relay {}", **relay))??;
+            println!("Relay {} activated momentarily", **relay);
+        }
+        CliCommands::Delay { relay, delay } => {
+            client
+                .set_port_delay(*relay, *delay)
+                .with_context(|| format!("Failed to set delay for relay {}", **relay))??;
+            println!(
+                "Relay {} activated with {} second delay before turning OFF",
+                **relay, delay
+            );
+        }
         CliCommands::QueryAddress => {
-            let rsp = d
-                .read_address()
-                .with_context(|| "Cannot read RS485 address")?;
-            println!("RS485 address: {:#04x}", rsp);
+            // Note: Connection was already set up with broadcast address above
+            let address = client.read_address().context(
+                "Failed to query device address (ensure only one device is connected)",
+            )??;
+            println!("Device responded with address: {}", address);
         }
         CliCommands::SetAddress { address } => {
-            d.set_address(*address)
-                .with_context(|| "Cannot set RS485 address")?;
+            client
+                .set_address(*address)
+                .with_context(|| format!("Failed to set new Modbus address to {}", address))??;
+            println!(
+                "Successfully sent command to set Modbus address to {}. \
+                 Remember to use this new address for future communication.",
+                address
+            );
         }
     }
 

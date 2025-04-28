@@ -1,142 +1,388 @@
+//! Provides a synchronous Modbus client for the R413D08 relay module.
+//!
+//! This module defines the [`R413D08`] struct, which acts as a high-level interface
+//! for interacting with the R413D08 device over Modbus (RTU or TCP). It utilizes
+//! the `tokio_modbus` library in its synchronous mode and relies on protocol
+//! definitions (register addresses, data encoding/decoding) from the [`crate::protocol`] module.
+
 use crate::protocol as proto;
 use std::time::Duration;
 use tokio_modbus::prelude::{SyncReader, SyncWriter};
 
-type Result<T> = std::result::Result<T, crate::tokio_error::Error>;
-
+/// A synchronous client for interacting with an R413D08 relay module over Modbus.
+///
+/// This client wraps a [`tokio_modbus::client::sync::Context`] and provides
+/// methods specific to the R413D08's protocol, such as reading port states,
+/// controlling individual or all ports, and managing the device's Modbus address.
+///
+/// It simplifies interaction by translating device-specific operations into
+/// appropriate Modbus function calls (primarily Read Holding Registers 0x03 and
+/// Write Single Register 0x06) using constants and helpers defined in [`crate::protocol`].
 pub struct R413D08 {
+    /// The underlying synchronous Modbus client context.
     ctx: tokio_modbus::client::sync::Context,
 }
 
 impl R413D08 {
-    /// Constructs a new R413D08 client
+    /// Creates a new R413D08 client instance.
+    ///
+    /// Requires a pre-configured [`tokio_modbus::client::sync::Context`], which
+    /// encapsulates the Modbus connection (TCP or Serial).
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx`: A synchronous Modbus client context, already connected.
+    ///
+    /// # Examples
+    ///
+    /// **TCP Connection:**
+    /// ```no_run
+    /// use r413d08_lib::tokio_sync_client::R413D08;
+    /// use r413d08_lib::protocol::{Address, Port};
+    /// use tokio_modbus::client::sync::Context;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Connect to a Modbus TCP device at IP 192.168.1.100, port 502
+    /// let socket_addr = "192.168.1.100:502".parse()?;
+    /// let mut ctx = tokio_modbus::client::sync::tcp::connect(socket_addr)?;
+    ///
+    /// let mut client = R413D08::new(ctx);
+    ///
+    /// // Now use the client methods
+    /// let port_states = client.read_ports()??;
+    /// println!("Port states: {}", port_states);
+    /// client.set_port_open(Port::try_from(0)?)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// **Serial (RTU) Connection (Conceptual):**
+    /// ```no_run
+    /// use r413d08_lib::tokio_sync_client::R413D08;
+    /// use r413d08_lib::protocol::{Address, Port};
+    /// use tokio_modbus::client::sync::Context;
+    /// use tokio_modbus::Slave;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Requires serial port features enabled in tokio-modbus
+    /// let builder = tokio_serial::new("/dev/ttyUSB0", 9600) // Baud rate 9600
+    ///    .parity(tokio_serial::Parity::None)
+    ///    .stop_bits(tokio_serial::StopBits::One)
+    ///    .data_bits(tokio_serial::DataBits::Eight)
+    ///    .flow_control(tokio_serial::FlowControl::None);
+    /// // Assume device is currently at address 1
+    /// let slave = Slave(*Address::try_from(1)?);
+    /// let mut ctx = tokio_modbus::client::sync::rtu::connect_slave(&builder, slave).expect("Failed to connect");
+    /// let mut client = R413D08::new(ctx);
+    /// // ... use client ...
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new(ctx: tokio_modbus::client::sync::Context) -> Self {
         Self { ctx }
     }
 
-    /// Sets the modbus context timeout.
-    pub fn set_timeout(&mut self, timeout: Duration) {
+    /// Sets the timeout for Modbus requests.
+    ///
+    /// If a request takes longer than this duration, it will be aborted
+    /// and return a timeout error.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout`: The communication timeout duration. Set to `None` to disable timeouts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use r413d08_lib::tokio_sync_client::R413D08;
+    /// # use std::time::Duration;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let socket_addr = "192.168.1.100:502".parse()?;
+    /// # let mut ctx = tokio_modbus::client::sync::tcp::connect(socket_addr)?;
+    /// let mut client = R413D08::new(ctx);
+    /// // Set a 2-second timeout
+    /// client.set_timeout(Some(Duration::from_secs(2)));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
         self.ctx.set_timeout(timeout);
     }
 
+    /// Retrieves the current Modbus communication timeout.
+    ///
+    /// # Returns
+    ///
+    /// An `Option<Duration>` indicating the configured timeout duration,
+    /// or `None` if no timeout is set.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use r413d08_lib::tokio_sync_client::R413D08;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let socket_addr = "192.168.1.100:502".parse()?;
+    /// # let mut ctx = tokio_modbus::client::sync::tcp::connect(socket_addr)?;
+    /// let client = R413D08::new(ctx);
+    /// if let Some(timeout) = client.timeout() {
+    ///     println!("Current timeout: {:?}", timeout);
+    /// } else {
+    ///     println!("No timeout is set.");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn timeout(&self) -> Option<Duration> {
         self.ctx.timeout()
     }
 
-    /// Read the port status of all ports.
-    pub fn read_ports(&mut self) -> Result<Vec<super::State>> {
-        let rsp = self
+    /// Reads the current status (Open/Close) of all [`proto::NUMBER_OF_PORTS`] ports.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// * `Ok(proto::PortStates)`: The decoded states of all ports.
+    /// * `Err(tokio_modbus::Error)`: If a Modbus communication error occurs (e.g., timeout, CRC error, exception response).
+    pub fn read_ports(&mut self) -> tokio_modbus::Result<proto::PortStates> {
+        match self
             .ctx
-            .read_holding_registers(proto::READ_PORTS_REG_ADDR, proto::READ_PORTS_REG_QUAN)??;
-        Ok(rsp
-            .iter()
-            .map(|relay| {
-                if *relay != 0 {
-                    super::State::Open
-                } else {
-                    super::State::Close
-                }
-            })
-            .collect::<Vec<_>>())
+            .read_holding_registers(proto::PortStates::ADDRESS, proto::PortStates::QUANTITY)
+        {
+            Ok(Ok(rsp)) => {
+                // Modbus read successful, now decode
+                Ok(Ok(proto::PortStates::decode_from_holding_registers(&rsp)))
+            }
+            Ok(Err(err)) => {
+                // Modbus read returned an error/exception within the Ok variant
+                Ok(Err(err))
+            }
+            Err(err) => {
+                // Underlying communication error (e.g., IO error, timeout)
+                Err(err)
+            }
+        }
     }
 
-    /// Set port to open.
+    /// Sets the specified port to the **Open** state (activates relay).
     ///
-    /// * 'port' - Port number 0 to 7.
-    pub fn set_port_open(&mut self, port: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_OPEN_REG_DATA,
-        )??)
-    }
-
-    /// Set all ports to open.
-    pub fn set_all_open(&mut self) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::SET_ALL_PORTS_OPEN_REG_ADDR,
-            proto::SET_ALL_PORTS_OPEN_REG_DATA,
-        )??)
-    }
-
-    /// Set port to close.
+    /// # Arguments
     ///
-    /// * 'port' - Port number 0 to 7.
-    pub fn set_port_close(&mut self, port: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_CLOSE_REG_DATA,
-        )??)
-    }
-
-    /// Set all ports to close.
-    pub fn set_all_close(&mut self) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::SET_ALL_PORTS_CLOSE_REG_ADDR,
-            proto::SET_ALL_PORTS_CLOSE_REG_DATA,
-        )??)
-    }
-
-    /// Toggle port status.
+    /// * `port`: The [`proto::Port`] to open.
     ///
-    /// * 'port' - Port number 0 to 7.
-    pub fn set_port_toggle(&mut self, port: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_TOGGLE_REG_DATA,
-        )??)
-    }
-
-    /// Set port to low an all others to high.
+    /// # Errors
     ///
-    /// * 'port' - Port number 0 to 7.
-    pub fn set_port_latch(&mut self, port: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_LATCH_REG_DATA,
-        )??)
-    }
-
-    /// Set port to low for 1 second.
-    ///
-    /// * 'port' - Port number 0 to 7.
-    pub fn set_port_momentary(&mut self, port: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_MOMENTARY_REG_DATA,
-        )??)
-    }
-
-    /// Set port to low for delay seconds.
-    ///
-    /// * 'port' - Port number 0 to 7.
-    /// * 'delay' - Delay in seconds from 0 to 255.
-    pub fn set_port_delay(&mut self, port: u8, delay: u8) -> Result<()> {
-        Ok(self.ctx.write_single_register(
-            proto::encode_port_number(port)?,
-            proto::SET_PORT_DELAY_REG_DATA + delay as u16,
-        )??)
-    }
-
-    /// Reads the current Modbus address
-    ///
-    /// Note: When using this command, only one temperature module can be connected to the RS485 bus,
-    /// more than one will be wrong!
-    /// The connected modbus address must be the broadcast address 255.
-    pub fn read_address(&mut self) -> Result<u8> {
-        let rsp = self
-            .ctx
-            .read_holding_registers(proto::READ_ADDRESS_REG_ADDR, proto::READ_ADDRESS_REG_QUAN)??;
-        Ok(*rsp.first().expect("Result on success expected") as u8)
-    }
-
-    /// Set the Modbus address
-    ///
-    /// * 'address' - The address can be from 1 to 247.
-    pub fn set_address(&mut self, address: u8) -> Result<()> {
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_open(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
         self.ctx.write_single_register(
-            proto::WRITE_ADDRESS_REG_ADDR,
-            proto::write_address_encode_address(address)?,
-        )??;
-        Ok(())
+            port.address_for_write_register(),
+            proto::Port::REG_DATA_SET_PORT_OPEN,
+        )
+    }
+
+    /// Sets **all** ports to the **Open** state simultaneously.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_all_open(&mut self) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            proto::PortsAll::ADDRESS,
+            proto::PortsAll::REG_DATA_SET_ALL_OPEN,
+        )
+    }
+
+    /// Sets the specified port to the **Close** state (deactivates relay).
+    ///
+    /// # Arguments
+    ///
+    /// * `port`: The [`proto::Port`] to close.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_close(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            port.address_for_write_register(),
+            proto::Port::REG_DATA_SET_PORT_CLOSE,
+        )
+    }
+
+    /// Sets **all** ports to the **Close** state simultaneously.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_all_close(&mut self) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            proto::PortsAll::ADDRESS,
+            proto::PortsAll::REG_DATA_SET_ALL_CLOSE,
+        )
+    }
+
+    /// Toggles the current state of the specified port (Open -> Close, Close -> Open). Also called "Self-locking".
+    ///
+    /// # Arguments
+    ///
+    /// * `port`: The [`proto::Port`] to toggle.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_toggle(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            port.address_for_write_register(),
+            proto::Port::REG_DATA_SET_PORT_TOGGLE,
+        )
+    }
+
+    /// Latches the specified port (Inter-locking): Sets the given `port` to Open and all *other* ports to Close.
+    ///
+    /// # Arguments
+    ///
+    /// * `port`: The [`proto::Port`] to latch open.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_latch(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            port.address_for_write_register(),
+            proto::Port::REG_DATA_SET_PORT_LATCH,
+        )
+    }
+
+    /// Activates the specified port momentarily (Non-locking): Opens the port for ~1 second, then automatically Closes.
+    ///
+    /// # Arguments
+    ///
+    /// * `port`: The [`proto::Port`] to activate momentarily.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_momentary(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            port.address_for_write_register(),
+            proto::Port::REG_DATA_SET_PORT_MOMENTARY,
+        )
+    }
+
+    /// Initiates a delayed action on the specified port (typically Open -> Delay -> Close).
+    ///
+    /// # Arguments
+    ///
+    /// * `port`: The [`proto::Port`] for the delayed action.
+    /// * `delay`: Delay duration in seconds (0-255).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    pub fn set_port_delay(&mut self, port: proto::Port, delay: u8) -> tokio_modbus::Result<()> {
+        self.ctx.write_single_register(
+            port.address_for_write_register(),
+            proto::Port::encode_delay_for_write_register(delay),
+        )
+    }
+
+    /// Reads the configured Modbus device address from the device itself.
+    ///
+    /// **Important Usage Notes:**
+    /// * This command typically requires the client's context to be set
+    ///   to the **correct current address** of the target device OR the
+    ///   **broadcast address** ([`proto::Address::BROADCAST`]).
+    /// * Using the broadcast address usually requires that **only one** device is
+    ///   physically present and responding on the Modbus network segment.
+    /// * Consult the R413D08 device manual for specifics on reading the address.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing:
+    /// * `Ok(proto::Address)`: The decoded device address. Note that the underlying [`proto::Address::decode_from_holding_registers`] does not currently validate the range of the returned address.
+    /// * `Err(tokio_modbus::Error)`: If a Modbus communication error occurs.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use r413d08_lib::tokio_sync_client::R413D08;
+    /// use r413d08_lib::protocol::Address;
+    /// use tokio_modbus::client::sync::Context;
+    /// use tokio_modbus::Slave;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Requires serial port features enabled in tokio-modbus
+    /// let builder = tokio_serial::new("/dev/ttyUSB0", 9600) // Baud rate 9600
+    ///     .parity(tokio_serial::Parity::None)
+    ///     .stop_bits(tokio_serial::StopBits::One)
+    ///     .data_bits(tokio_serial::DataBits::Eight)
+    ///     .flow_control(tokio_serial::FlowControl::None);
+    /// // Assume only one device connected, use broadcast address for reading
+    /// let slave = Slave(*Address::BROADCAST);
+    /// let mut ctx = tokio_modbus::client::sync::rtu::connect_slave(&builder, slave).expect("Failed to connect");
+    ///
+    /// let mut client = R413D08::new(ctx);
+    ///
+    /// let address = client.read_address()??;
+    /// println!("Device responded with address: {}", address);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn read_address(&mut self) -> tokio_modbus::Result<proto::Address> {
+        // This implementation handles nested Results from the original code.
+        match self.ctx.read_holding_registers(
+            proto::Address::ADDRESS,  // Config register address
+            proto::Address::QUANTITY, // Read one register
+        ) {
+            Ok(Ok(rsp)) => {
+                // Modbus read successful, decode (assuming decode doesn't fail here)
+                Ok(Ok(proto::Address::decode_from_holding_registers(&rsp)))
+            }
+            Ok(Err(err)) => {
+                // Modbus exception occurred
+                Ok(Err(err))
+            }
+            Err(err) => {
+                // IO error occurred
+                Err(err)
+            }
+        }
+    }
+
+    /// Sets a new Modbus device address.
+    ///
+    /// **Warning:**
+    /// * This permanently changes the device's Modbus address.
+    /// * This command must be sent while addressing the device using its **current** Modbus address.
+    /// * After successfully changing the address, subsequent communication with the
+    ///   device **must** use the new address.
+    ///
+    /// # Arguments
+    ///
+    /// * `address`: The new [`proto::Address`] to assign to the device.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use r413d08_lib::tokio_sync_client::R413D08;
+    /// use r413d08_lib::protocol::Address;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let socket_addr = "192.168.1.100:502".parse()?;
+    /// # let mut ctx = tokio_modbus::client::sync::tcp::connect(socket_addr)?;
+    /// let mut client = R413D08::new(ctx);
+    ///
+    /// // Set the new Modbus address to 10.
+    /// let new_address = Address::try_from(10)?;
+    /// client.set_address(new_address)??;
+    /// println!("Address successfully changed to {}", new_address);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_address(&mut self, address: proto::Address) -> tokio_modbus::Result<()> {
+        self.ctx
+            .write_single_register(proto::Address::ADDRESS, address.encode_for_write_register())
     }
 }
