@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+
+## [0.2.0](https://github.com/acpiccolo/R413D08-Controller/compare/v0.1.1...v0.2.0) - 2025-04-29
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [v0.1.1](https://github.com/acpiccolo/R413D08-controller/compare/f6080b867a6631289dbad4fee81e2054df1fbdb1..v0.1.1) - 2025-04-29
 #### Miscellaneous Chores
 - revert "chore: update CHANGELOG.md" - ([f6080b8](https://github.com/acpiccolo/R413D08-controller/commit/f6080b867a6631289dbad4fee81e2054df1fbdb1)) - acpiccolo
