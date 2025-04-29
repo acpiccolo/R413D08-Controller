@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [v0.1.1](https://github.com/acpiccolo/R413D08-controller/compare/f6080b867a6631289dbad4fee81e2054df1fbdb1..v0.1.1) - 2025-04-29
+#### Miscellaneous Chores
+- revert "chore: update CHANGELOG.md" - ([f6080b8](https://github.com/acpiccolo/R413D08-controller/commit/f6080b867a6631289dbad4fee81e2054df1fbdb1)) - acpiccolo
+
+- - -
+
 ## [v0.1.0](https://github.com/acpiccolo/R413D08-controller/compare/e8351627f58de1f473f1e0bd1f57ca1fa19b51ee..v0.1.0) - 2025-04-29
 #### Build system
 - create release-plz.yml - ([7698fa0](https://github.com/acpiccolo/R413D08-controller/commit/7698fa0b8596a50c57438840ebc926aadffe4a5b)) - acpiccolo
