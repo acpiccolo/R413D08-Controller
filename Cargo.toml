@@ -2,6 +2,9 @@
 name = "relay"
 version = "0.2.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/acpiccolo/R413D08-Controller"
+description = "R413D08 protocol and commandline tool"
 
 [lib]
 name = "r413d08_lib"
