@@ -154,8 +154,19 @@ impl std::fmt::Display for PortStates {
 /// Modbus "Write Single Register" (function code 0x06). The register *address*
 /// corresponds to the 1-based port index (see [`Port::address_for_write_register`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Port(u8); // Internally stores 0-based index
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Port {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u8::deserialize(deserializer)?;
+        Port::try_from(value).map_err(serde::de::Error::custom)
+    }
+}
 
 impl Port {
     /// The minimum valid port index (inclusive).
@@ -311,8 +322,19 @@ impl PortsAll {
 /// Use [`Address::try_from`] to create an instance from a `u8`.
 /// Provides constants and methods for reading/writing the device address itself via Modbus commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Address(u8);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u8::deserialize(deserializer)?;
+        Address::try_from(value).map_err(serde::de::Error::custom)
+    }
+}
 
 /// Allows accessing the inner `u8` address value directly.
 impl std::ops::Deref for Address {
