@@ -44,7 +44,7 @@ enum CliConnection {
     },
     /// Connect via Modbus/RTU (Serial).
     Rtu {
-        /// The serial device path (e.g., "/dev/ttyUSB0", "COM3").
+        /// The serial device path.
         #[arg(short, long, default_value_t = default_device_name())]
         device: String,
 
