@@ -1,4 +1,4 @@
-//! Provides a asynchronous Modbus client for the R413D08 relay module.
+//! Provides an asynchronous Modbus client for the R413D08 relay module.
 //!
 //! This module defines the [`R413D08`] struct, which acts as a high-level interface
 //! for interacting with the R413D08 device over Modbus (RTU or TCP). It utilizes
@@ -8,7 +8,7 @@
 use crate::protocol as proto;
 use tokio_modbus::prelude::{Reader, Writer};
 
-/// A asynchronous client for interacting with an R413D08 relay module over Modbus.
+/// An asynchronous client for interacting with an R413D08 relay module over Modbus.
 ///
 /// This client wraps a [`tokio_modbus::client::Context`] and provides
 /// methods specific to the R413D08's protocol, such as reading port states,
@@ -30,7 +30,7 @@ impl R413D08 {
     ///
     /// # Arguments
     ///
-    /// * `ctx`: A asynchronous Modbus client context, already connected.
+    /// * `ctx`: An asynchronous Modbus client context, already connected.
     ///
     /// # Examples
     ///
