@@ -298,6 +298,13 @@ impl TryFrom<u8> for Port {
     }
 }
 
+impl std::fmt::Display for Port {
+    /// Formats the port as its number (e.g., "0", "7").
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A zero-sized type providing constants for controlling all ports simultaneously.
 pub struct PortsAll;
 
