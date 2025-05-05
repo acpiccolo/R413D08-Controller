@@ -3,6 +3,19 @@ All notable changes to this project will be documented in this file. See [conven
 
 - - -
 
+## [0.2.1](https://github.com/acpiccolo/R413D08-Controller/compare/v0.2.0...v0.2.1) - 2025-05-05
+
+### Fixed
+
+- fixed protocol address and port range check during deserialization
+
+### Other
+
+- *(deps)* bump crate-ci/typos from 1.31.1 to 1.32.0
+- add port display implementation
+- removed command line example
+- fix typo
+
 ## [0.2.0](https://github.com/acpiccolo/R413D08-Controller/compare/v0.1.1...v0.2.0) - 2025-04-29
 
 ### Other
