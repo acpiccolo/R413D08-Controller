@@ -3,6 +3,24 @@ All notable changes to this project will be documented in this file. See [conven
 
 - - -
 
+## [0.2.1](https://github.com/acpiccolo/R413D08-Controller/compare/v0.2.0...v0.2.1) - 2025-06-24
+
+### Fixed
+
+- fixed protocol address and port range check during deserialization
+
+### Other
+
+- enhance PortStates with panic checks, indexing, and iterator implementations; improve Address decoding and formatting
+- improve set_timeout method in tokio synchronous Modbus client
+- update README.md to clarify image description
+- *(deps)* update flexi_logger requirement from 0.30 to 0.31
+- *(deps)* bump crate-ci/typos from 1.32.0 to 1.33.1
+- *(deps)* bump crate-ci/typos from 1.31.1 to 1.32.0
+- add port display implementation
+- removed command line example
+- fix typo
+
 ## [0.2.0](https://github.com/acpiccolo/R413D08-Controller/compare/v0.1.1...v0.2.0) - 2025-04-29
 
 ### Other
