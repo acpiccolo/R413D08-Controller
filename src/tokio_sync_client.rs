@@ -82,14 +82,15 @@ impl R413D08 {
         Self { ctx }
     }
 
-    /// Sets the timeout for Modbus requests.
+    /// Sets the timeout for subsequent Modbus read/write operations.
     ///
-    /// If a request takes longer than this duration, it will be aborted
-    /// and return a timeout error.
+    /// If an operation takes longer than this duration, it will fail with a timeout error
+    /// (specifically, a `ModbusError` with `ErrorKind::Timeout`).
     ///
     /// # Arguments
     ///
-    /// * `timeout`: The communication timeout duration. Set to `None` to disable timeouts.
+    /// * `timeout` - The `Duration` to wait before timing out. Can also accept `Option<Duration>`.
+    ///   Passing `None` disables the timeout.
     ///
     /// # Examples
     ///
@@ -105,7 +106,7 @@ impl R413D08 {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+    pub fn set_timeout(&mut self, timeout: impl Into<Option<Duration>>) {
         self.ctx.set_timeout(timeout);
     }
 
