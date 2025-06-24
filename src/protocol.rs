@@ -101,6 +101,10 @@ impl PortStates {
     ///
     /// A [`PortStates`] struct containing the decoded state for each port.
     ///
+    /// # Panics
+    ///
+    /// Panics if `words` does not have length equal to [`NUMBER_OF_PORTS`].
+    ///
     /// # Example
     /// ```
     /// # use r413d08_lib::protocol::{PortState, PortStates, Word, NUMBER_OF_PORTS};
@@ -113,6 +117,13 @@ impl PortStates {
     /// // ... and so on for all ports
     /// ```
     pub fn decode_from_holding_registers(words: &[Word]) -> Self {
+        assert_eq!(
+            words.len(),
+            NUMBER_OF_PORTS,
+            "Incorrect number of words provided for PortStates decoding: expected {}, got {}",
+            NUMBER_OF_PORTS,
+            words.len()
+        );
         let mut port_states = [PortState::Close; NUMBER_OF_PORTS];
         // Iterate over the words read, up to the number of ports we have storage for.
         for (i, word) in words.iter().enumerate().take(NUMBER_OF_PORTS) {
@@ -126,24 +137,52 @@ impl PortStates {
         self.0.iter()
     }
 
+    /// Returns a slice containing all `Temperature` values.
+    pub fn as_slice(&self) -> &[PortState] {
+        &self.0
+    }
+
     /// Provides direct access to the underlying array of port states.
     pub fn as_array(&self) -> &[PortState; NUMBER_OF_PORTS] {
         &self.0
     }
 }
 
+impl IntoIterator for PortStates {
+    type Item = PortState;
+    type IntoIter = std::array::IntoIter<PortState, NUMBER_OF_PORTS>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a PortStates {
+    type Item = &'a PortState;
+    type IntoIter = std::slice::Iter<'a, PortState>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// Provides a comma-separated string representation of all port states (e.g., "close, open, close, ...").
 impl std::fmt::Display for PortStates {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut first = true;
-        for state in self.iter() {
-            if !first {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", state)?;
-            first = false;
-        }
-        Ok(())
+        let p_strs: Vec<String> = self.0.iter().map(|t| t.to_string()).collect();
+        write!(f, "{}", p_strs.join(", "))
+    }
+}
+
+impl std::ops::Index<usize> for PortStates {
+    type Output = PortState;
+
+    /// Allows indexing into the port states array.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds (0-7).
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
     }
 }
 
@@ -400,13 +439,25 @@ impl Address {
     ///
     /// Panics if:
     /// 1.  `words` is empty.
-    /// 2.  The address value read from the register is outside the valid range.
+    /// 2.  The upper byte of the `Word` containing the address is non-zero, indicating unexpected data.
+    /// 3.  The address value read from the register is outside the valid assignable range.
     pub fn decode_from_holding_registers(words: &[Word]) -> Self {
         let word_value = *words
             .first()
             .expect("Register data for address must not be empty");
+
+        // Ensure the upper byte is zero, as the address is a single byte value.
+        // This helps catch malformed responses if the device sends unexpected data.
+        assert_eq!(
+            word_value & 0xFF00,
+            0,
+            "Invalid data in address register: upper byte is non-zero (value: {:#06X})",
+            word_value
+        );
+
+        let address_byte = word_value as u8;
         // Attempt to convert the u8 value, panicking if it's out of range.
-        Self::try_from(word_value as u8).expect("Invalid address value read from device register")
+        Self::try_from(address_byte).expect("Invalid address value read from device register")
     }
 
     /// Encodes the device [`Address`] into a [`Word`] value suitable for writing to the
@@ -468,8 +519,7 @@ impl TryFrom<u8> for Address {
 /// Provides a hexadecimal string representation (e.g., "0x01", "0xf7").
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Format as 2-digit hexadecimal with "0x" prefix.
-        write!(f, "0x{:02x}", self.0)
+        write!(f, "{:#04x}", self.0)
     }
 }
 
