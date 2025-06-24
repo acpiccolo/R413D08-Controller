@@ -21,7 +21,7 @@ To use this tool, you need:
 - One or more **1-8 Channel Relay Board**.
 - A **USB-to-RS485 converter** (for RTU mode).
 
-![R413D08 controller](/images/r413d08.png)
+![R413D08 8 Channel Module](/images/r413d08.png)
 
 ## Technical Specifications R4DCB08
 | Feature | Details |
