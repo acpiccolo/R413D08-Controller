@@ -55,12 +55,12 @@ fn main() -> Result<()> {
         commandline::CliConnection::Tcp { address, command } => {
             let socket_addr = address
                 .parse()
-                .with_context(|| format!("Cannot parse TCP address '{}'", address))?;
-            trace!("Connecting via TCP to {}...", socket_addr);
+                .with_context(|| format!("Cannot parse TCP address '{address}'"))?;
+            trace!("Connecting via TCP to {socket_addr}...");
             (
                 R413D08::new(
                     tokio_modbus::client::sync::tcp::connect(socket_addr)
-                        .with_context(|| format!("Cannot open {:?}", socket_addr))?,
+                        .with_context(|| format!("Cannot open {socket_addr:?}"))?,
                 ),
                 command,
             )
@@ -83,23 +83,20 @@ fn main() -> Result<()> {
                 }
                 let broadcast_address = proto::Address::BROADCAST;
                 if address != &broadcast_address {
-                    info!(
-                        "Ignore address {} use broadcast address {}",
-                        address, broadcast_address
-                    );
+                    info!("Ignore address {address} use broadcast address {broadcast_address}");
                 }
                 broadcast_address
             } else {
                 *address
             };
-            trace!("Connecting via RTU to {} address {}", device, address);
+            trace!("Connecting via RTU to {device} address {address}");
             (
                 R413D08::new(
                     tokio_modbus::client::sync::rtu::connect_slave(
                         &r413d08_lib::tokio_serial::serial_port_builder(device),
                         tokio_modbus::Slave(*address),
                     )
-                    .with_context(|| format!("Cannot open RTU device {}", device))?,
+                    .with_context(|| format!("Cannot open RTU device {device}"))?,
                 ),
                 command,
             )
@@ -181,16 +178,15 @@ fn main() -> Result<()> {
             let address = client.read_address().context(
                 "Failed to query device address (ensure only one device is connected)",
             )??;
-            println!("Device responded with address: {}", address);
+            println!("Device responded with address: {address}");
         }
         commandline::CliCommands::SetAddress { address } => {
             client
                 .set_address(*address)
-                .with_context(|| format!("Failed to set new Modbus address to {}", address))??;
+                .with_context(|| format!("Failed to set new Modbus address to {address}"))??;
             println!(
-                "Successfully sent command to set Modbus address to {}. \
-                 Remember to use this new address for future communication.",
-                address
+                "Successfully sent command to set Modbus address to {address}. \
+                 Remember to use this new address for future communication."
             );
         }
     }

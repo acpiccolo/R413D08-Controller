@@ -451,8 +451,7 @@ impl Address {
         assert_eq!(
             word_value & 0xFF00,
             0,
-            "Invalid data in address register: upper byte is non-zero (value: {:#06X})",
-            word_value
+            "Invalid data in address register: upper byte is non-zero (value: {word_value:#06X})"
         );
 
         let address_byte = word_value as u8;
