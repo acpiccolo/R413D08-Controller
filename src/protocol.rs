@@ -14,6 +14,29 @@
 
 use thiserror::Error;
 
+/// A comprehensive error type for all operations within the `protocol` module.
+///
+/// This enum consolidates errors that can occur during the decoding
+/// data, encoding of values, or validation of parameters.
+#[derive(Error, Debug, PartialEq)]
+pub enum Error {
+    /// Error indicating that the data received from a Modbus read has an unexpected length.
+    #[error("Invalid data length: expected {expected}, got {got}")]
+    UnexpectedDataLength { expected: usize, got: usize },
+
+    /// Error for malformed data within a register, e.g., an unexpected non-zero upper byte.
+    #[error("Invalid data in register: {details}")]
+    InvalidData { details: String },
+
+    /// Error for an invalid value read from a register, e.g., an undefined baud rate code.
+    #[error("Invalid value code for {entity}: {code}")]
+    InvalidValueCode { entity: String, code: u16 },
+
+    /// Error for an attempt to encode a value that is not supported, e.g., a `NaN` temperature.
+    #[error("Cannot encode value: {reason}")]
+    EncodeError { reason: String },
+}
+
 /// Represents a single 16-bit value stored in a Modbus register.
 ///
 /// Modbus RTU typically operates on 16-bit registers.
@@ -48,13 +71,16 @@ impl PortState {
     /// # use r413d08_lib::protocol::PortState;
     /// assert_eq!(PortState::decode_from_holding_registers(0x0000), PortState::Close);
     /// assert_eq!(PortState::decode_from_holding_registers(0x0001), PortState::Open);
-    /// assert_eq!(PortState::decode_from_holding_registers(0xFFFF), PortState::Open);
     /// ```
     pub fn decode_from_holding_registers(word: Word) -> Self {
         // According to the device protocol document:
         // - `0x0000` represents [`PortState::Close`].
         // - `0x0001` (and likely any non-zero value) represents [`PortState::Open`].
-        if word != 0 { Self::Open } else { Self::Close }
+        if word != 0 {
+            PortState::Open
+        } else {
+            PortState::Close
+        }
     }
 }
 
@@ -101,9 +127,11 @@ impl PortStates {
     ///
     /// A [`PortStates`] struct containing the decoded state for each port.
     ///
-    /// # Panics
-    ///
-    /// Panics if `words` does not have length equal to [`NUMBER_OF_PORTS`].
+    /// This function is robust against malformed data:
+    /// - If `words` contains fewer than [`NUMBER_OF_PORTS`] items, the remaining
+    ///   port states default to [`PortState::Close`].
+    /// - If `words` contains more than [`NUMBER_OF_PORTS`] items, the extra
+    ///   items are ignored.
     ///
     /// # Example
     /// ```
@@ -117,13 +145,6 @@ impl PortStates {
     /// // ... and so on for all ports
     /// ```
     pub fn decode_from_holding_registers(words: &[Word]) -> Self {
-        assert_eq!(
-            words.len(),
-            NUMBER_OF_PORTS,
-            "Incorrect number of words provided for PortStates decoding: expected {}, got {}",
-            NUMBER_OF_PORTS,
-            words.len()
-        );
         let mut port_states = [PortState::Close; NUMBER_OF_PORTS];
         // Iterate over the words read, up to the number of ports we have storage for.
         for (i, word) in words.iter().enumerate().take(NUMBER_OF_PORTS) {
@@ -441,22 +462,30 @@ impl Address {
     /// 1.  `words` is empty.
     /// 2.  The upper byte of the `Word` containing the address is non-zero, indicating unexpected data.
     /// 3.  The address value read from the register is outside the valid assignable range.
-    pub fn decode_from_holding_registers(words: &[Word]) -> Self {
-        let word_value = *words
-            .first()
-            .expect("Register data for address must not be empty");
+    pub fn decode_from_holding_registers(words: &[Word]) -> Result<Self, Error> {
+        if words.len() != Self::QUANTITY as usize {
+            return Err(Error::UnexpectedDataLength {
+                expected: Self::QUANTITY as usize,
+                got: words.len(),
+            });
+        }
+        let word_value = words[0];
 
-        // Ensure the upper byte is zero, as the address is a single byte value.
-        // This helps catch malformed responses if the device sends unexpected data.
-        assert_eq!(
-            word_value & 0xFF00,
-            0,
-            "Invalid data in address register: upper byte is non-zero (value: {word_value:#06X})"
-        );
+        if word_value & 0xFF00 != 0 {
+            return Err(Error::InvalidData {
+                details: format!(
+                    "Upper byte of address register is non-zero (value: {word_value:#06X})"
+                ),
+            });
+        }
 
         let address_byte = word_value as u8;
-        // Attempt to convert the u8 value, panicking if it's out of range.
-        Self::try_from(address_byte).expect("Invalid address value read from device register")
+        match Self::try_from(address_byte) {
+            Ok(address) => Ok(address),
+            Err(err) => Err(Error::InvalidData {
+                details: format!("{err}"),
+            }),
+        }
     }
 
     /// Encodes the device [`Address`] into a [`Word`] value suitable for writing to the
@@ -525,6 +554,7 @@ impl std::fmt::Display for Address {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
 
     // --- Address Tests ---
     #[test]
@@ -557,39 +587,36 @@ mod tests {
         let encoded = addr.encode_for_write_register();
         assert_eq!(encoded, 42u16);
         // Test decode (assumes valid input from register)
-        let decoded = Address::decode_from_holding_registers(&[encoded]);
+        let decoded = Address::decode_from_holding_registers(&[encoded]).unwrap();
         assert_eq!(decoded, addr);
     }
 
     #[test]
-    #[should_panic(expected = "Register data for address must not be empty")]
     fn address_decode_panics_on_empty() {
-        let _ = Address::decode_from_holding_registers(&[]);
+        assert_matches!(Address::decode_from_holding_registers(&[]), Err(..));
     }
 
     #[test]
-    #[should_panic(expected = "Invalid address value read from device register")]
     fn address_decode_panics_on_invalid_value_zero() {
         // 0 is outside the valid 1-247 range
-        let _ = Address::decode_from_holding_registers(&[0x0000]);
+        assert_matches!(Address::decode_from_holding_registers(&[0x0000]), Err(..));
     }
 
     #[test]
-    #[should_panic(expected = "Invalid address value read from device register")]
     fn address_decode_panics_on_invalid_value_high() {
         // 248 is outside the valid 1-247 range
-        let _ = Address::decode_from_holding_registers(&[0x00F8]);
+        assert_matches!(Address::decode_from_holding_registers(&[0x00F8]), Err(..));
     }
 
     #[test]
     fn address_decode_valid() {
         assert_eq!(
             Address::decode_from_holding_registers(&[0x0001]),
-            Address(1)
+            Ok(Address(1))
         );
         assert_eq!(
             Address::decode_from_holding_registers(&[0x00F7]),
-            Address(247)
+            Ok(Address(247))
         );
     }
 
@@ -634,21 +661,24 @@ mod tests {
         assert_eq!(
             PortState::decode_from_holding_registers(0xFFFF),
             PortState::Open
-        ); // Non-zero
+        );
     }
 
     #[test]
     fn port_states_decode() {
+        // Test case 1: Correct number of words, all closed
         let words_all_closed = [0x0000; NUMBER_OF_PORTS];
-        let words_mixed = [
-            0x0001, 0x0000, 0xFFFF, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000,
-        ];
-        let words_short = [0x0001, 0x0000];
-        let words_long = [
-            0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000, 0x9999,
-        ];
-
         let expected_all_closed = PortStates([PortState::Close; NUMBER_OF_PORTS]);
+        assert_eq!(
+            PortStates::decode_from_holding_registers(&words_all_closed),
+            expected_all_closed,
+            "Should decode all-closed states correctly"
+        );
+
+        // Test case 2: Correct number of words, mixed states
+        let words_mixed = [
+            0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000,
+        ];
         let expected_mixed = PortStates([
             PortState::Open,
             PortState::Close,
@@ -659,28 +689,52 @@ mod tests {
             PortState::Open,
             PortState::Close,
         ]);
+        assert_eq!(
+            PortStates::decode_from_holding_registers(&words_mixed),
+            expected_mixed,
+            "Should decode mixed states correctly"
+        );
 
+        // Test case 3: Fewer words than expected (short read)
+        let words_short = [0x0001, 0x0000]; // Only 2 words
         let mut expected_short_arr = [PortState::Close; NUMBER_OF_PORTS];
         expected_short_arr[0] = PortState::Open;
         expected_short_arr[1] = PortState::Close;
         let expected_short = PortStates(expected_short_arr);
-
-        assert_eq!(
-            PortStates::decode_from_holding_registers(&words_all_closed),
-            expected_all_closed
-        );
-        assert_eq!(
-            PortStates::decode_from_holding_registers(&words_mixed),
-            expected_mixed
-        );
         assert_eq!(
             PortStates::decode_from_holding_registers(&words_short),
-            expected_short
+            expected_short,
+            "Should handle short reads by filling with Close"
         );
+
+        // Test case 4: More words than expected (long read)
+        let words_long = [
+            0x0000, 0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x0000, 0x0001, 0x9999, 0x8888,
+        ]; // 10 words
+        let expected_long = PortStates([
+            PortState::Close,
+            PortState::Open,
+            PortState::Close,
+            PortState::Open,
+            PortState::Close,
+            PortState::Open,
+            PortState::Close,
+            PortState::Open,
+        ]);
         assert_eq!(
             PortStates::decode_from_holding_registers(&words_long),
-            expected_mixed
-        ); // Ignores extra
+            expected_long,
+            "Should handle long reads by ignoring extra words"
+        );
+
+        // Test case 5: Empty slice
+        let words_empty: [Word; 0] = [];
+        let expected_empty = PortStates([PortState::Close; NUMBER_OF_PORTS]);
+        assert_eq!(
+            PortStates::decode_from_holding_registers(&words_empty),
+            expected_empty,
+            "Should handle empty slice by returning all-closed"
+        );
     }
 
     // --- Display Tests ---

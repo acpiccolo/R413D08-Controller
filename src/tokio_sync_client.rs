@@ -9,6 +9,21 @@ use crate::protocol as proto;
 use std::time::Duration;
 use tokio_modbus::prelude::{SyncReader, SyncWriter};
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    /// Wraps `proto::Error`.
+    #[error(transparent)]
+    ProtocolError(#[from] proto::Error),
+    /// Wraps `tokio_modbus::ExceptionCode`.
+    #[error(transparent)]
+    TokioExceptionError(#[from] tokio_modbus::ExceptionCode),
+    /// Wraps `tokio_modbus::Error`.
+    #[error(transparent)]
+    TokioError(#[from] tokio_modbus::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// A synchronous client for interacting with an R413D08 relay module over Modbus.
 ///
 /// This client wraps a [`tokio_modbus::client::sync::Context`] and provides
@@ -49,7 +64,7 @@ impl R413D08 {
     /// let mut client = R413D08::new(ctx);
     ///
     /// // Now use the client methods
-    /// let port_states = client.read_ports()??;
+    /// let port_states = client.read_ports()?;
     /// println!("Port states: {}", port_states);
     /// client.set_port_open(Port::try_from(0)?)?;
     /// # Ok(())
@@ -137,6 +152,25 @@ impl R413D08 {
         self.ctx.timeout()
     }
 
+    /// Helper function to map tokio result to our result.
+    fn map_tokio_result<T>(result: tokio_modbus::Result<T>) -> Result<T> {
+        match result {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(err)) => Err(err.into()), // Modbus exception
+            Err(err) => Err(err.into()),     // IO error
+        }
+    }
+
+    /// Helper function to read holding registers and decode them into a specific type.
+    fn read_and_decode<T, F>(&mut self, address: u16, quantity: u16, decoder: F) -> Result<T>
+    where
+        F: FnOnce(&[u16]) -> Result<T>,
+    {
+        decoder(&Self::map_tokio_result(
+            self.ctx.read_holding_registers(address, quantity),
+        )?)
+    }
+
     /// Reads the current status (Open/Close) of all [`proto::NUMBER_OF_PORTS`] ports.
     ///
     /// # Returns
@@ -144,24 +178,12 @@ impl R413D08 {
     /// A `Result` containing:
     /// * `Ok(proto::PortStates)`: The decoded states of all ports.
     /// * `Err(tokio_modbus::Error)`: If a Modbus communication error occurs (e.g., timeout, CRC error, exception response).
-    pub fn read_ports(&mut self) -> tokio_modbus::Result<proto::PortStates> {
-        match self
-            .ctx
-            .read_holding_registers(proto::PortStates::ADDRESS, proto::PortStates::QUANTITY)
-        {
-            Ok(Ok(rsp)) => {
-                // Modbus read successful, now decode
-                Ok(Ok(proto::PortStates::decode_from_holding_registers(&rsp)))
-            }
-            Ok(Err(err)) => {
-                // Modbus read returned an error/exception within the Ok variant
-                Ok(Err(err))
-            }
-            Err(err) => {
-                // Underlying communication error (e.g., IO error, timeout)
-                Err(err)
-            }
-        }
+    pub fn read_ports(&mut self) -> Result<proto::PortStates> {
+        self.read_and_decode(
+            proto::PortStates::ADDRESS,
+            proto::PortStates::QUANTITY,
+            |words| Ok(proto::PortStates::decode_from_holding_registers(words)),
+        )
     }
 
     /// Sets the specified port to the **Open** state (activates relay).
@@ -173,11 +195,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_open(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_open(&mut self, port: proto::Port) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::REG_DATA_SET_PORT_OPEN,
-        )
+        ))
     }
 
     /// Sets **all** ports to the **Open** state simultaneously.
@@ -185,11 +207,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_all_open(&mut self) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_all_open(&mut self) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             proto::PortsAll::ADDRESS,
             proto::PortsAll::REG_DATA_SET_ALL_OPEN,
-        )
+        ))
     }
 
     /// Sets the specified port to the **Close** state (deactivates relay).
@@ -201,11 +223,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_close(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_close(&mut self, port: proto::Port) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::REG_DATA_SET_PORT_CLOSE,
-        )
+        ))
     }
 
     /// Sets **all** ports to the **Close** state simultaneously.
@@ -213,11 +235,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_all_close(&mut self) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_all_close(&mut self) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             proto::PortsAll::ADDRESS,
             proto::PortsAll::REG_DATA_SET_ALL_CLOSE,
-        )
+        ))
     }
 
     /// Toggles the current state of the specified port (Open -> Close, Close -> Open). Also called "Self-locking".
@@ -229,11 +251,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_toggle(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_toggle(&mut self, port: proto::Port) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::REG_DATA_SET_PORT_TOGGLE,
-        )
+        ))
     }
 
     /// Latches the specified port (Inter-locking): Sets the given `port` to Open and all *other* ports to Close.
@@ -245,11 +267,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_latch(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_latch(&mut self, port: proto::Port) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::REG_DATA_SET_PORT_LATCH,
-        )
+        ))
     }
 
     /// Activates the specified port momentarily (Non-locking): Opens the port for ~1 second, then automatically Closes.
@@ -261,11 +283,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_momentary(&mut self, port: proto::Port) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_momentary(&mut self, port: proto::Port) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::REG_DATA_SET_PORT_MOMENTARY,
-        )
+        ))
     }
 
     /// Initiates a delayed action on the specified port (typically Open -> Delay -> Close).
@@ -278,11 +300,11 @@ impl R413D08 {
     /// # Errors
     ///
     /// Returns `Err(tokio_modbus::Error)` if a Modbus communication error occurs.
-    pub fn set_port_delay(&mut self, port: proto::Port, delay: u8) -> tokio_modbus::Result<()> {
-        self.ctx.write_single_register(
+    pub fn set_port_delay(&mut self, port: proto::Port, delay: u8) -> Result<()> {
+        Self::map_tokio_result(self.ctx.write_single_register(
             port.address_for_write_register(),
             proto::Port::encode_delay_for_write_register(delay),
-        )
+        ))
     }
 
     /// Reads the configured Modbus device address from the device itself.
@@ -322,30 +344,15 @@ impl R413D08 {
     ///
     /// let mut client = R413D08::new(ctx);
     ///
-    /// let address = client.read_address()??;
+    /// let address = client.read_address()?;
     /// println!("Device responded with address: {}", address);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn read_address(&mut self) -> tokio_modbus::Result<proto::Address> {
-        // This implementation handles nested Results from the original code.
-        match self.ctx.read_holding_registers(
-            proto::Address::ADDRESS,  // Config register address
-            proto::Address::QUANTITY, // Read one register
-        ) {
-            Ok(Ok(rsp)) => {
-                // Modbus read successful, decode (assuming decode doesn't fail here)
-                Ok(Ok(proto::Address::decode_from_holding_registers(&rsp)))
-            }
-            Ok(Err(err)) => {
-                // Modbus exception occurred
-                Ok(Err(err))
-            }
-            Err(err) => {
-                // IO error occurred
-                Err(err)
-            }
-        }
+    pub fn read_address(&mut self) -> Result<proto::Address> {
+        self.read_and_decode(proto::Address::ADDRESS, proto::Address::QUANTITY, |words| {
+            Ok(proto::Address::decode_from_holding_registers(words)?)
+        })
     }
 
     /// Sets a new Modbus device address.
@@ -377,13 +384,17 @@ impl R413D08 {
     ///
     /// // Set the new Modbus address to 10.
     /// let new_address = Address::try_from(10)?;
-    /// client.set_address(new_address)??;
+    /// client.set_address(new_address)?;
     /// println!("Address successfully changed to {}", new_address);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn set_address(&mut self, address: proto::Address) -> tokio_modbus::Result<()> {
-        self.ctx
-            .write_single_register(proto::Address::ADDRESS, address.encode_for_write_register())
+    pub fn set_address(&mut self, address: proto::Address) -> Result<()> {
+        Self::map_tokio_result(
+            self.ctx.write_single_register(
+                proto::Address::ADDRESS,
+                address.encode_for_write_register(),
+            ),
+        )
     }
 }

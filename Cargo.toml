@@ -54,3 +54,4 @@ humantime = { version = "2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+assert_matches = "1"
