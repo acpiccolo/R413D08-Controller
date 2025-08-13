@@ -303,7 +303,7 @@ impl R413D08 {
     /// # Returns
     ///
     /// A `Result` containing:
-    /// * `Ok(proto::Address)`: The decoded device address. Note that the underlying [`proto::Address::decode_from_holding_registers`] does not currently validate the range of the returned address.
+    /// * `Ok(proto::Address)`: The decoded device address.
     /// * `Err(tokio_modbus::Error)`: If a Modbus communication error occurs.
     ///
     /// # Examples

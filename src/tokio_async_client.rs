@@ -282,7 +282,7 @@ impl R413D08 {
     /// # Returns
     ///
     /// A `Result` containing:
-    /// * `Ok(proto::Address)`: The decoded device address. Note that the underlying [`proto::Address::decode_from_holding_registers`] does not currently validate the range of the returned address.
+    /// * `Ok(proto::Address)`: The decoded device address.
     /// * `Err(tokio_modbus::Error)`: If a Modbus communication error occurs.
     ///
     /// # Examples
@@ -339,17 +339,18 @@ impl R413D08 {
     /// # Examples
     ///
     /// ```no_run
-    /// use r413d08_lib::tokio_sync_client::R413D08;
+    /// use r413d08_lib::tokio_async_client::R413D08;
     /// use r413d08_lib::protocol::Address;
     ///
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// # let socket_addr = "192.168.1.100:502".parse()?;
-    /// # let mut ctx = tokio_modbus::client::sync::tcp::connect(socket_addr)?;
+    /// # let mut ctx = tokio_modbus::client::tcp::connect(socket_addr).await?;
     /// let mut client = R413D08::new(ctx);
     ///
     /// // Set the new Modbus address to 10.
     /// let new_address = Address::try_from(10)?;
-    /// client.set_address(new_address)?;
+    /// client.set_address(new_address).await?;
     /// println!("Address successfully changed to {}", new_address);
     /// # Ok(())
     /// # }
