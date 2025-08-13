@@ -5,24 +5,9 @@
 //! the `tokio_modbus` library in its synchronous mode and relies on protocol
 //! definitions (register addresses, data encoding/decoding) from the [`crate::protocol`] module.
 
-use crate::protocol as proto;
+use crate::{protocol as proto, tokio_common::Result};
 use std::time::Duration;
 use tokio_modbus::prelude::{SyncReader, SyncWriter};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    /// Wraps `proto::Error`.
-    #[error(transparent)]
-    ProtocolError(#[from] proto::Error),
-    /// Wraps `tokio_modbus::ExceptionCode`.
-    #[error(transparent)]
-    TokioExceptionError(#[from] tokio_modbus::ExceptionCode),
-    /// Wraps `tokio_modbus::Error`.
-    #[error(transparent)]
-    TokioError(#[from] tokio_modbus::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// A synchronous client for interacting with an R413D08 relay module over Modbus.
 ///
@@ -80,11 +65,9 @@ impl R413D08 {
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// // Requires serial port features enabled in tokio-modbus
-    /// let builder = tokio_serial::new("/dev/ttyUSB0", 9600) // Baud rate 9600
-    ///    .parity(tokio_serial::Parity::None)
-    ///    .stop_bits(tokio_serial::StopBits::One)
-    ///    .data_bits(tokio_serial::DataBits::Eight)
-    ///    .flow_control(tokio_serial::FlowControl::None);
+    /// let builder = r413d08_lib::tokio_common::serial_port_builder(
+    ///     "/dev/ttyUSB0", // Or "COM3" on Windows, etc.
+    /// );
     /// // Assume device is currently at address 1
     /// let slave = Slave(*Address::try_from(1)?);
     /// let mut ctx = tokio_modbus::client::sync::rtu::connect_slave(&builder, slave).expect("Failed to connect");

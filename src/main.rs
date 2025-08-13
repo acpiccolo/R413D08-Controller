@@ -93,7 +93,7 @@ fn main() -> Result<()> {
             (
                 R413D08::new(
                     tokio_modbus::client::sync::rtu::connect_slave(
-                        &r413d08_lib::tokio_serial::serial_port_builder(device),
+                        &r413d08_lib::tokio_common::serial_port_builder(device),
                         tokio_modbus::Slave(*address),
                     )
                     .with_context(|| format!("Cannot open RTU device {device}"))?,
