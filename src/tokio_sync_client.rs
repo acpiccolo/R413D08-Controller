@@ -64,7 +64,6 @@ impl R413D08 {
     /// use tokio_modbus::Slave;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// // Requires serial port features enabled in tokio-modbus
     /// let builder = r413d08_lib::tokio_common::serial_port_builder(
     ///     "/dev/ttyUSB0", // Or "COM3" on Windows, etc.
     /// );
