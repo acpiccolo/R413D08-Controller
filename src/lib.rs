@@ -1,54 +1,55 @@
 //! A library for controlling the R413D08 8-channel relay module via Modbus.
 //!
-//! This crate provides a high-level API for interacting with the R413D08 relay
-//! module, abstracting away the low-level Modbus protocol details. It offers
-//! both synchronous and asynchronous clients, built on top of the `tokio-modbus`
-//! and `tokio-serial` libraries.
+//! This crate provides two main ways to interact with the R413D08 relay module:
+//!
+//! 1.  **High-Level, Safe Clients**: Stateful, thread-safe clients that are easy
+//!     to share and use in concurrent applications. This is the recommended
+//!     approach for most users. See [`tokio_sync_safe_client::SafeClient`] (blocking)
+//!     and [`tokio_async_safe_client::SafeClient`] (`async`).
+//!
+//! 2.  **Low-Level, Stateless Functions**: A set of stateless functions that
+//!     directly map to the device's Modbus commands. This API offers maximum
+//!     flexibility but requires manual management of the Modbus context. See
+//!     the [`tokio_sync`] and [`tokio_async`] modules.
 //!
 //! ## Features
 //!
-//! - **Protocol Implementation**: Complete implementation of the R413D08 Modbus protocol,
-//!   including commands for reading and writing relay states, and configuring the device.
-//! - **Synchronous Client**: A blocking client (`r413d08_lib::tokio_sync_client::R413D08`)
-//!   for straightforward, synchronous applications.
-//! - **Asynchronous Client**: A non-blocking, `async/await` client (`r413d08_lib::tokio_async_client::R413D08`)
-//!   for integration into `tokio`-based applications.
-//! - **Strongly-Typed API**: Utilizes Rust's type system to ensure protocol correctness
+//! - **Protocol Implementation**: Complete implementation of the R413D08 Modbus protocol.
+//! - **Stateful, Thread-Safe Clients**: For easy and safe concurrent use.
+//! - **Stateless, Low-Level Functions**: For maximum flexibility and control.
+//! - **Synchronous and Asynchronous APIs**: Both blocking and `async/await` APIs are available.
+//! - **Strongly-Typed API**: Utilizes Rust's type system for protocol correctness
 //!   (e.g., `Port`, `Address`, `PortState`).
 //!
 //! ## Quick Start
 //!
-//! Here is a quick example of how to use the synchronous client to turn a relay on:
+//! This example shows how to use the recommended high-level, synchronous `SafeClient`.
 //!
 //! ```no_run
 //! use r413d08_lib::{
 //!     protocol::{Address, Port},
-//!     tokio_sync_client::R413D08,
+//!     tokio_sync_safe_client::SafeClient,
 //! };
+//! use tokio_modbus::client::sync::tcp;
 //! use tokio_modbus::Slave;
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Configure the serial port for RTU communication
-//!     let builder = r413d08_lib::tokio_common::serial_port_builder("/dev/ttyUSB0");
-//!     // Set the Modbus slave address of the device
-//!     let slave = Slave(*Address::default());
+//!     // Connect to the device and create a stateful, safe client
+//!     let socket_addr = "192.168.1.100:502".parse()?;
+//!     let ctx = tcp::connect_slave(socket_addr, Slave(*Address::default()))?;
+//!     let client = SafeClient::new(ctx);
 //!
-//!     // Connect to the device
-//!     let mut ctx = tokio_modbus::client::sync::rtu::connect_slave(&builder, slave)?;
-//!     let mut client = R413D08::new(ctx);
+//!     // Use the client to interact with the device
+//!     client.set_port_open(Port::try_from(0)?)?;
+//!     let status = client.read_ports()?;
 //!
-//!     // Turn relay 0 ON
-//!     let port_to_control = Port::try_from(0)?;
-//!     client.set_port_open(port_to_control)?;
-//!
-//!     println!("Successfully turned on relay 0.");
+//!     println!("Successfully turned on relay 0. Current status: {}", status);
 //!
 //!     Ok(())
 //! }
 //! ```
 //!
-//! For more details on the protocol and available commands, see the [`protocol`] module.
-//! For client-specific usage, see the [`tokio_sync_client`] and [`tokio_async_client`] modules.
+//! For more details, see the documentation for the specific client you wish to use.
 
 pub mod protocol;
 
@@ -60,8 +61,24 @@ pub mod protocol;
 ))]
 pub mod tokio_common;
 
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "tokio-rtu-sync", feature = "tokio-tcp-sync")))
+)]
 #[cfg(any(feature = "tokio-rtu-sync", feature = "tokio-tcp-sync"))]
-pub mod tokio_sync_client;
+pub mod tokio_sync;
 
+#[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-rtu", feature = "tokio-tcp"))))]
 #[cfg(any(feature = "tokio-rtu", feature = "tokio-tcp"))]
-pub mod tokio_async_client;
+pub mod tokio_async;
+
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "tokio-rtu-sync", feature = "tokio-tcp-sync")))
+)]
+#[cfg(any(feature = "tokio-rtu-sync", feature = "tokio-tcp-sync"))]
+pub mod tokio_sync_safe_client;
+
+#[cfg_attr(docsrs, doc(cfg(any(feature = "tokio-rtu", feature = "tokio-tcp"))))]
+#[cfg(any(feature = "tokio-rtu", feature = "tokio-tcp"))]
+pub mod tokio_async_safe_client;

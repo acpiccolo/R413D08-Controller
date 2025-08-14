@@ -11,7 +11,7 @@ use clap::Parser;
 use dialoguer::Confirm;
 use flexi_logger::{Logger, LoggerHandle};
 use log::*;
-use r413d08_lib::{protocol as proto, tokio_sync_client::R413D08};
+use r413d08_lib::{protocol as proto, tokio_sync_safe_client::SafeClient};
 use std::{ops::Deref, panic};
 
 mod commandline;
@@ -51,17 +51,15 @@ fn main() -> Result<()> {
 
     let _log_handle = logging_init(args.verbose.log_level_filter());
 
-    let (mut client, command) = match &args.connection {
+    let (mut ctx, command) = match &args.connection {
         commandline::CliConnection::Tcp { address, command } => {
             let socket_addr = address
                 .parse()
                 .with_context(|| format!("Cannot parse TCP address '{address}'"))?;
             trace!("Connecting via TCP to {socket_addr}...");
             (
-                R413D08::new(
-                    tokio_modbus::client::sync::tcp::connect(socket_addr)
-                        .with_context(|| format!("Cannot open {socket_addr:?}"))?,
-                ),
+                tokio_modbus::client::sync::tcp::connect(socket_addr)
+                    .with_context(|| format!("Cannot open {socket_addr:?}"))?,
                 command,
             )
         }
@@ -91,18 +89,17 @@ fn main() -> Result<()> {
             };
             trace!("Connecting via RTU to {device} address {address}");
             (
-                R413D08::new(
-                    tokio_modbus::client::sync::rtu::connect_slave(
-                        &r413d08_lib::tokio_common::serial_port_builder(device),
-                        tokio_modbus::Slave(*address),
-                    )
-                    .with_context(|| format!("Cannot open RTU device {device}"))?,
-                ),
+                tokio_modbus::client::sync::rtu::connect_slave(
+                    &r413d08_lib::tokio_common::serial_port_builder(device),
+                    tokio_modbus::Slave(*address),
+                )
+                .with_context(|| format!("Cannot open RTU device {device}"))?,
                 command,
             )
         }
     };
-    client.set_timeout(Some(args.timeout));
+    ctx.set_timeout(Some(args.timeout));
+    let client = SafeClient::new(ctx);
 
     match command {
         commandline::CliCommands::Status => {

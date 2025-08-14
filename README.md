@@ -93,6 +93,40 @@ For TCP Modbus:
 relay tcp 192.168.0.222:502 off 3
 ```
 
+## Library Usage
+
+This crate can also be used as a library to control R413D08 modules from your own Rust application.
+
+The recommended way is to use the high-level, thread-safe `SafeClient`.
+
+### Library Example
+
+```rust,no_run
+use r413d08_lib::{
+    protocol::{Address, Port},
+    tokio_sync_safe_client::SafeClient,
+};
+use tokio_modbus::client::sync::tcp;
+use tokio_modbus::Slave;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to the device and create a stateful, safe client
+    let socket_addr = "192.168.1.100:502".parse()?;
+    let ctx = tcp::connect_slave(socket_addr, Slave(*Address::default()))?;
+    let client = SafeClient::new(ctx);
+
+    // Use the client to interact with the device
+    client.set_port_open(Port::try_from(0)?)?;
+    let status = client.read_ports()?;
+
+    println!("Successfully turned on relay 0. Current status: {}", status);
+
+    Ok(())
+}
+```
+
+For more advanced use cases, the library also provides low-level, stateless functions in the `r413d08_lib::tokio_sync` and `r413d08_lib::tokio_async` modules.
+
 ### Cargo Features
 | Feature | Purpose | Default |
 | :--- | :------ | :-----: |
