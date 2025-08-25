@@ -127,17 +127,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 For more advanced use cases, the library also provides low-level, stateless functions in the `r413d08_lib::tokio_sync` and `r413d08_lib::tokio_async` modules.
 
-### Cargo Features
-| Feature | Purpose | Default |
-| :--- | :------ | :-----: |
-| `bin-dependencies` | Enable all features required by the binary | ✅ |
-| `tokio-rtu-sync` | Enable the implementation for the tokio modbus synchronous RTU client | - |
-| `tokio-rtu` | Enable the implementation for the tokio modbus asynchronous RTU client | - |
-| `tokio-tcp-sync` | Enable the implementation for the tokio modbus synchronous TCP client | - |
-| `tokio-tcp` | Enable the implementation for the tokio modbus asynchronous TCP client | - |
-| `safe-client-sync` | Enable the implementation for the stateful thread-safe synchronous client | - |
-| `safe-client-async` | Enable the implementation for the stateful thread-safe asynchronous client | - |
-| `serde` | Enable the serde framework for protocol structures | - |
+# Cargo Features
+
+This crate uses a feature-based system to allow you to select the specific components you need, minimizing dependencies and compile times.
+
+### For Binary Users
+
+If you are using the `relay` command-line tool, no action is needed. The binary is compiled with the `default` feature, which automatically enables all necessary functionalities for both RTU and TCP communication.
+
+### For Library Users
+
+If you are using this project as a library, you can customize your build by enabling only the features you require. This is ideal for optimizing your application's footprint.
+
+Below is a detailed breakdown of the available features:
+
+| Feature             | Description                                                                                                                                  | Default for Library | Default for Binary |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------|:-------------------:|:------------------:|
+| **`bin-dependencies`**  | Enables all features required to build the `relay` binary, including CLI parsing, logging, and both RTU/TCP clients.                      |                     |         ✅         |
+| **`tokio-rtu-sync`**    | **Synchronous RTU Client:** Enables the `tokio-modbus` RTU client for synchronous (blocking) serial communication.                           |                     |         ✅         |
+| **`tokio-rtu`**         | **Asynchronous RTU Client:** Enables the `tokio-modbus` RTU client for asynchronous (non-blocking) serial communication.                     |                     |                    |
+| **`tokio-tcp-sync`**    | **Synchronous TCP Client:** Enables the `tokio-modbus` TCP client for synchronous (blocking) network communication.                          |                     |         ✅         |
+| **`tokio-tcp`**         | **Asynchronous TCP Client:** Enables the `tokio-modbus` TCP client for asynchronous (non-blocking) network communication.                      |                     |                    |
+| **`safe-client-sync`**  | **Stateful Synchronous Client:** Provides a thread-safe, stateful wrapper for easy synchronous interaction with the device.                 |                     |         ✅         |
+| **`safe-client-async`** | **Stateful Asynchronous Client:** Provides a thread-safe, stateful wrapper for easy asynchronous interaction with the device.                |                     |                    |
+| **`serde`**             | **Serialization:** Implements `serde::Serialize` and `serde::Deserialize` for all protocol-related structs, useful for data exchange.      |                     |         ✅         |
+
 
 
 ## License
