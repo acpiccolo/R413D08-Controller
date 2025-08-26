@@ -9,9 +9,11 @@ This Rust project enables communication with an **R413D08 8 Channel Module** usi
 
 ## Table of Contents
 - [Hardware Requirements](#hardware-requirements)
-- [Technical Specifications](#technical-specifications-r4dcb08)
+- [Technical Documentation](#technical-documentation)
+- [Technical Specifications](#technical-specifications-r413d08)
 - [Installation & Compilation](#installation--compilation)
-- [Usage](#usage)
+- [Command-Line Usage](#command-line-usage)
+- [Library Usage](#library-usage)
 - [Cargo Features](#cargo-features)
 - [License](#license)
 
@@ -23,7 +25,11 @@ To use this tool, you need:
 
 ![R413D08 8 Channel Module](/images/r413d08.png)
 
-## Technical Specifications R4DCB08
+## Technical Documentation
+For more detailed information, please refer to the official datasheets available in the [`docs/`](./docs/) directory:
+- [`8.Channel.Multifunction.RS485.Module.command.pdf`](./docs/8.Channel.Multifunction.RS485.Module.command.pdf)
+
+## Technical Specifications R413D08
 | Feature | Details |
 |---------|---------|
 | **Operating Voltage** | 5V DC (5V version) or 6-24V DC (12V version) |
@@ -59,47 +65,66 @@ Ensure you have the following dependencies installed before proceeding:
    ```
    This installs `relay` to `$HOME/.cargo/bin`, making it accessible from anywhere.
 
-## Usage
-### View Available Commands
-To list all available commands and their options, run:
+## Command-Line Usage
+
+This tool provides a range of commands for device discovery, configuration, and data acquisition.
+
+### Connection Types
+You can connect to the relay module via Modbus RTU (serial) or TCP.
+
+- **RTU (Serial):**
+  ```sh
+  relay rtu --address 1 <COMMAND>
+  ```
+- **TCP:**
+  ```sh
+  relay tcp 192.168.0.222:502 <COMMAND>
+  ```
+
+### Available Commands
+
+#### Help
+To see a full list of commands and options:
 ```sh
 relay --help
 ```
-### Read relay status values
-For **RTU Modbus (RS485) connected** devices:
-```sh
-relay rtu --address 1 status
-```
-For **TCP Modbus connected** devices:
-```sh
-relay tcp 192.168.0.222:502 status
-```
-#### Set relay '0' to 'On'
-For RTU Modbus:
-```sh
-relay rtu --address 1 on 0
-```
-For TCP Modbus:
-```sh
-relay tcp 192.168.0.222:502 on 0
-```
-#### Turn Off Relay '3'
-For RTU Modbus:
-```sh
-relay rtu --address 1 off 3
-```
-For TCP Modbus:
-```sh
-relay tcp 192.168.0.222:502 off 3
-```
+
+#### Read Commands
+- **Read Relay Status:** Reads the ON/OFF status of all 8 relays.
+  ```sh
+  relay tcp 192.168.0.222:502 status
+  ```
+
+#### Set Commands
+- **Turn a Relay ON:**
+  ```sh
+  # Turn on relay 0
+  relay rtu --address 1 on 0
+  ```
+- **Turn a Relay OFF:**
+  ```sh
+  # Turn off relay 3
+  relay rtu --address 1 off 3
+  ```
 
 ## Library Usage
 
-This crate can also be used as a library to control R413D08 modules from your own Rust application.
+This project can also be used as a library in your own Rust applications. It provides a high-level, thread-safe `SafeClient` for easy interaction with the R413D08 module, available in both synchronous and asynchronous versions.
 
-The recommended way is to use the high-level, thread-safe `SafeClient`.
+### Quick Start: Synchronous Client
 
-### Library Example
+Here's a quick example of how to use the synchronous `SafeClient` to read relay statuses over a TCP connection.
+
+#### Dependencies
+
+First, add the required dependencies to your project:
+```sh
+cargo add R413D08@0.3 --no-default-features --features "tokio-tcp-sync,safe-client-sync,serde"
+cargo add tokio-modbus@0.16
+cargo add tokio@1 --features full
+```
+
+#### Example Usage
 
 ```rust,no_run
 use r413d08_lib::{
@@ -127,30 +152,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 For more advanced use cases, the library also provides low-level, stateless functions in the `r413d08_lib::tokio_sync` and `r413d08_lib::tokio_async` modules.
 
-# Cargo Features
+## Cargo Features
 
-This crate uses a feature-based system to allow you to select the specific components you need, minimizing dependencies and compile times.
+This crate uses a feature-based system to minimize dependencies. When using it as a library, you should disable default features and select only the components you need.
 
-### For Binary Users
+- **`default`**: Enables `bin-dependencies`, intended for compiling the `relay` command-line tool.
 
-If you are using the `relay` command-line tool, no action is needed. The binary is compiled with the `default` feature, which automatically enables all necessary functionalities for both RTU and TCP communication.
+### Client Features
+- **`tokio-rtu-sync`**: Synchronous (blocking) RTU client.
+- **`tokio-tcp-sync`**: Synchronous (blocking) TCP client.
+- **`tokio-rtu`**: Asynchronous (non-blocking) RTU client.
+- **`tokio-tcp`**: Asynchronous (non-blocking) TCP client.
 
-### For Library Users
+### High-Level Wrappers
+- **`safe-client-sync`**: A thread-safe, stateful wrapper for synchronous clients.
+- **`safe-client-async`**: A thread-safe, stateful wrapper for asynchronous clients.
 
-If you are using this project as a library, you can customize your build by enabling only the features you require. This is ideal for optimizing your application's footprint.
-
-Below is a detailed breakdown of the available features:
-
-| Feature             | Description                                                                                                                                  | Default for Library | Default for Binary |
-|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------|:-------------------:|:------------------:|
-| **`bin-dependencies`**  | Enables all features required to build the `relay` binary, including CLI parsing, logging, and both RTU/TCP clients.                      |                     |         ✅         |
-| **`tokio-rtu-sync`**    | **Synchronous RTU Client:** Enables the `tokio-modbus` RTU client for synchronous (blocking) serial communication.                           |                     |         ✅         |
-| **`tokio-rtu`**         | **Asynchronous RTU Client:** Enables the `tokio-modbus` RTU client for asynchronous (non-blocking) serial communication.                     |                     |                    |
-| **`tokio-tcp-sync`**    | **Synchronous TCP Client:** Enables the `tokio-modbus` TCP client for synchronous (blocking) network communication.                          |                     |         ✅         |
-| **`tokio-tcp`**         | **Asynchronous TCP Client:** Enables the `tokio-modbus` TCP client for asynchronous (non-blocking) network communication.                      |                     |                    |
-| **`safe-client-sync`**  | **Stateful Synchronous Client:** Provides a thread-safe, stateful wrapper for easy synchronous interaction with the device.                 |                     |         ✅         |
-| **`safe-client-async`** | **Stateful Asynchronous Client:** Provides a thread-safe, stateful wrapper for easy asynchronous interaction with the device.                |                     |                    |
-| **`serde`**             | **Serialization:** Implements `serde::Serialize` and `serde::Deserialize` for all protocol-related structs, useful for data exchange.      |                     |         ✅         |
+### Utility Features
+- **`serde`**: Implements `serde::Serialize` and `serde::Deserialize` for protocol structs.
+- **`bin-dependencies`**: All features required to build the `relay` binary.
 
 
 
