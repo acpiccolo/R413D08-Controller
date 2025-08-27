@@ -11,7 +11,7 @@ use clap::Parser;
 use dialoguer::Confirm;
 use flexi_logger::{Logger, LoggerHandle};
 use log::*;
-use r413d08_lib::{protocol as proto, tokio_sync_client::R413D08};
+use r413d08_lib::{protocol as proto, tokio_sync_safe_client::SafeClient};
 use std::{ops::Deref, panic};
 
 mod commandline;
@@ -51,17 +51,15 @@ fn main() -> Result<()> {
 
     let _log_handle = logging_init(args.verbose.log_level_filter());
 
-    let (mut client, command) = match &args.connection {
+    let (mut ctx, command) = match &args.connection {
         commandline::CliConnection::Tcp { address, command } => {
             let socket_addr = address
                 .parse()
                 .with_context(|| format!("Cannot parse TCP address '{address}'"))?;
             trace!("Connecting via TCP to {socket_addr}...");
             (
-                R413D08::new(
-                    tokio_modbus::client::sync::tcp::connect(socket_addr)
-                        .with_context(|| format!("Cannot open {socket_addr:?}"))?,
-                ),
+                tokio_modbus::client::sync::tcp::connect(socket_addr)
+                    .with_context(|| format!("Cannot open {socket_addr:?}"))?,
                 command,
             )
         }
@@ -91,24 +89,21 @@ fn main() -> Result<()> {
             };
             trace!("Connecting via RTU to {device} address {address}");
             (
-                R413D08::new(
-                    tokio_modbus::client::sync::rtu::connect_slave(
-                        &r413d08_lib::tokio_serial::serial_port_builder(device),
-                        tokio_modbus::Slave(*address),
-                    )
-                    .with_context(|| format!("Cannot open RTU device {device}"))?,
-                ),
+                tokio_modbus::client::sync::rtu::connect_slave(
+                    &r413d08_lib::tokio_common::serial_port_builder(device),
+                    tokio_modbus::Slave(*address),
+                )
+                .with_context(|| format!("Cannot open RTU device {device}"))?,
                 command,
             )
         }
     };
-    client.set_timeout(Some(args.timeout));
+    ctx.set_timeout(Some(args.timeout));
+    let client = SafeClient::new(ctx);
 
     match command {
         commandline::CliCommands::Status => {
-            let rsp = client
-                .read_ports()
-                .context("Failed to read port status")??;
+            let rsp = client.read_ports().context("Failed to read port status")?;
             println!("Relay Status:");
             for (idx, state) in rsp.iter().enumerate() {
                 println!(
@@ -125,49 +120,49 @@ fn main() -> Result<()> {
         commandline::CliCommands::On { relay } => {
             client
                 .set_port_open(*relay)
-                .with_context(|| format!("Failed to turn ON relay {}", **relay))??;
+                .with_context(|| format!("Failed to turn ON relay {}", **relay))?;
             println!("Relay {} turned ON", **relay);
         }
         commandline::CliCommands::AllOn => {
             client
                 .set_all_open()
-                .context("Failed to turn ALL relays ON")??;
+                .context("Failed to turn ALL relays ON")?;
             println!("All relays turned ON");
         }
         commandline::CliCommands::Off { relay } => {
             client
                 .set_port_close(*relay)
-                .with_context(|| format!("Failed to turn OFF relay {}", **relay))??;
+                .with_context(|| format!("Failed to turn OFF relay {}", **relay))?;
             println!("Relay {} turned OFF", **relay);
         }
         commandline::CliCommands::AllOff => {
             client
                 .set_all_close()
-                .context("Failed to turn ALL relays OFF")??;
+                .context("Failed to turn ALL relays OFF")?;
             println!("All relays turned OFF");
         }
         commandline::CliCommands::Toggle { relay } => {
             client
                 .set_port_toggle(*relay)
-                .with_context(|| format!("Failed to toggle relay {}", **relay))??;
+                .with_context(|| format!("Failed to toggle relay {}", **relay))?;
             println!("Relay {} toggled", **relay);
         }
         commandline::CliCommands::Latch { relay } => {
             client
                 .set_port_latch(*relay)
-                .with_context(|| format!("Failed to latch relay {}", **relay))??;
+                .with_context(|| format!("Failed to latch relay {}", **relay))?;
             println!("Relay {} latched ON (others OFF)", **relay);
         }
         commandline::CliCommands::Momentary { relay } => {
             client
                 .set_port_momentary(*relay)
-                .with_context(|| format!("Failed to activate momentary relay {}", **relay))??;
+                .with_context(|| format!("Failed to activate momentary relay {}", **relay))?;
             println!("Relay {} activated momentarily", **relay);
         }
         commandline::CliCommands::Delay { relay, delay } => {
             client
                 .set_port_delay(*relay, *delay)
-                .with_context(|| format!("Failed to set delay for relay {}", **relay))??;
+                .with_context(|| format!("Failed to set delay for relay {}", **relay))?;
             println!(
                 "Relay {} activated with {} second delay before turning OFF",
                 **relay, delay
@@ -175,15 +170,15 @@ fn main() -> Result<()> {
         }
         commandline::CliCommands::QueryAddress => {
             // Note: Connection was already set up with broadcast address above
-            let address = client.read_address().context(
-                "Failed to query device address (ensure only one device is connected)",
-            )??;
+            let address = client
+                .read_address()
+                .context("Failed to query device address (ensure only one device is connected)")?;
             println!("Device responded with address: {address}");
         }
         commandline::CliCommands::SetAddress { address } => {
             client
                 .set_address(*address)
-                .with_context(|| format!("Failed to set new Modbus address to {address}"))??;
+                .with_context(|| format!("Failed to set new Modbus address to {address}"))?;
             println!(
                 "Successfully sent command to set Modbus address to {address}. \
                  Remember to use this new address for future communication."

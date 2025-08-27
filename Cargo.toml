@@ -1,7 +1,7 @@
 [package]
 name = "R413D08"
 version = "0.2.1"
-edition = "2024"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/acpiccolo/R413D08-Controller"
 description = "R413D08 protocol and commandline tool"
@@ -16,11 +16,12 @@ path = "src/main.rs"
 required-features = ["bin-dependencies"]
 
 [features]
-default = ["tokio-rtu-sync", "tokio-rtu", "bin-dependencies"]
+default = ["bin-dependencies"]
 bin-dependencies = [
-    "dep:anyhow",
+    "safe-client-sync",
     "tokio-rtu-sync",
     "tokio-tcp-sync",
+    "dep:anyhow",
     "dep:log",
     "dep:tokio-serial",
     "clap/derive",
@@ -32,8 +33,10 @@ bin-dependencies = [
 ]
 tokio-rtu-sync = ["tokio-modbus/rtu-sync", "dep:tokio-serial"]
 tokio-rtu = ["tokio-modbus/rtu", "dep:tokio-serial"]
-tokio-tcp-sync = ["tokio/net", "tokio-modbus/tcp-sync"]
-tokio-tcp = ["tokio/net", "tokio-modbus/tcp"]
+tokio-tcp-sync = ["tokio/net", "tokio-modbus/tcp-sync", "dep:tokio-serial"]
+tokio-tcp = ["tokio/net", "tokio-modbus/tcp", "dep:tokio-serial"]
+safe-client-sync = ["tokio/sync"]
+safe-client-async = ["tokio/sync"]
 serde = ["serde/derive"]
 
 [dependencies]
@@ -54,3 +57,7 @@ humantime = { version = "2", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+assert_matches = "1"
+
+[package.metadata.cargo-machete]
+ignored = ["tokio"]
