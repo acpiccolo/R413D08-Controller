@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/acpiccolo/R413D08-Controller/compare/v0.3.1...v0.3.2) - 2025-09-29
+
+### Other
+
+- *(deps)* bump crate-ci/typos from 1.36.2 to 1.36.3
+- *(deps)* bump crate-ci/typos from 1.35.5 to 1.36.2
+- improve feature description in lib.rs
+
 ## [0.3.1](https://github.com/acpiccolo/R413D08-Controller/compare/v0.3.0...v0.3.1) - 2025-08-28
 
 ### Other
