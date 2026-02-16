@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/acpiccolo/R413D08-Controller/compare/v0.3.2...v0.3.3) - 2026-02-16
+
+### Other
+
+- *(deps)* bump crate-ci/typos from 1.43.3 to 1.43.4
+- *(deps)* bump crate-ci/typos from 1.42.3 to 1.43.3
+- *(deps)* bump crate-ci/typos from 1.42.1 to 1.42.3
+- *(deps)* bump crate-ci/typos from 1.42.0 to 1.42.1
+- *(deps)* bump crate-ci/typos from 1.41.0 to 1.42.0
+- *(deps)* bump crate-ci/typos from 1.40.0 to 1.41.0
+- *(deps)* bump crate-ci/typos from 1.39.2 to 1.40.0
+- *(deps)* bump crate-ci/typos from 1.39.0 to 1.39.2
+- *(deps)* bump actions/checkout from 5 to 6
+- *(deps)* bump crate-ci/typos from 1.38.1 to 1.39.0
+- *(deps)* update tokio-modbus requirement from 0.16 to 0.17
+
 ## [0.3.2](https://github.com/acpiccolo/R413D08-Controller/compare/v0.3.1...v0.3.2) - 2025-10-20
 
 ### Other
