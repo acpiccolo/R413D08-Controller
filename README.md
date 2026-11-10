@@ -79,6 +79,8 @@ You can connect to the relay module via Modbus RTU (serial) or TCP.
 - **TCP:**
   ```sh
   relay tcp 192.168.0.222:502 <COMMAND>
+  # Or with a specific slave address (default is 1):
+  relay tcp --slave 1 192.168.0.222:502 <COMMAND>
   ```
 
 ### Available Commands
