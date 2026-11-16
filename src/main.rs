@@ -52,14 +52,21 @@ fn main() -> Result<()> {
     let _log_handle = logging_init(args.verbose.log_level_filter());
 
     let (mut ctx, command) = match &args.connection {
-        commandline::CliConnection::Tcp { address, command } => {
+        commandline::CliConnection::Tcp {
+            address,
+            slave,
+            command,
+        } => {
             let socket_addr = address
                 .parse()
                 .with_context(|| format!("Cannot parse TCP address '{address}'"))?;
-            trace!("Connecting via TCP to {socket_addr}...");
+            trace!("Connecting via TCP to {socket_addr} slave {slave}...");
             (
-                tokio_modbus::client::sync::tcp::connect(socket_addr)
-                    .with_context(|| format!("Cannot open {socket_addr:?}"))?,
+                tokio_modbus::client::sync::tcp::connect_slave(
+                    socket_addr,
+                    tokio_modbus::Slave(**slave),
+                )
+                .with_context(|| format!("Cannot open {socket_addr:?}"))?,
                 command,
             )
         }
